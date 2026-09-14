@@ -1,0 +1,3815 @@
+From 0c004ed295c952c24be96876acae2b96d1f8eb4a Mon Sep 17 00:00:00 2001
+From: Arth  Sharma <arth.sharma@cginfinity.com>
+Date: Sun, 13 Sep 2026 22:58:48 -0700
+Subject: [PATCH] Backend Code
+
+---
+ CodeRefine.Api.csproj                         |  21 +
+ CodeRefine.Api.http                           |   6 +
+ Configuration/AiServiceSettings.cs            |  14 +
+ Configuration/GitHubSettings.cs               |  28 ++
+ Controllers/AnalysisController.cs             |  55 +++
+ Controllers/PullRequestsController.cs         |  42 ++
+ Controllers/RepositoriesController.cs         |  31 ++
+ Controllers/ReviewsController.cs              |  67 +++
+ DTOs/AiService/AnalyzeContracts.cs            |  37 ++
+ DTOs/Analysis/AnalysisResponse.cs             |  25 +
+ DTOs/Analysis/FindingDto.cs                   |  21 +
+ DTOs/Analysis/PatchDto.cs                     |  16 +
+ DTOs/Analysis/StartAnalysisRequest.cs         |  16 +
+ DTOs/Analysis/VerificationDto.cs              |  14 +
+ DTOs/GitHub/BranchDto.cs                      |   9 +
+ DTOs/GitHub/PullRequestDto.cs                 |  19 +
+ DTOs/GitHub/PullRequestFileDto.cs             |  12 +
+ DTOs/GitHub/RepositoryDto.cs                  |  14 +
+ DTOs/Review/ImprovementPrRequest.cs           |  16 +
+ DTOs/Review/ReviewRequest.cs                  |  15 +
+ Data/AppDbContext.cs                          | 111 +++++
+ .../20260910060216_InitialCreate.Designer.cs  | 453 ++++++++++++++++++
+ .../20260910060216_InitialCreate.cs           | 289 +++++++++++
+ Data/Migrations/AppDbContextModelSnapshot.cs  | 450 +++++++++++++++++
+ Enums/AnalysisStatus.cs                       |  15 +
+ Enums/FindingSeverity.cs                      |  10 +
+ Enums/FindingStatus.cs                        |  11 +
+ Enums/PatchStatus.cs                          |  11 +
+ Enums/ReviewDecision.cs                       |   9 +
+ Enums/VerificationCheckType.cs                |  15 +
+ Enums/VerificationStatus.cs                   |  11 +
+ Exceptions/CodeRefineException.cs             |  91 ++++
+ Middleware/ExceptionHandlingMiddleware.cs     |  77 +++
+ Models/AnalysisRun.cs                         |  36 ++
+ Models/Finding.cs                             |  33 ++
+ Models/Patch.cs                               |  23 +
+ Models/Repository.cs                          |  26 +
+ Models/Review.cs                              |  26 +
+ Models/User.cs                                |  13 +
+ Models/VerificationResult.cs                  |  23 +
+ Program.cs                                    |  86 ++++
+ Properties/launchSettings.json                |  25 +
+ Services/AI/AiService.cs                      |  61 +++
+ Services/AI/IAiService.cs                     |  12 +
+ Services/Analysis/AnalysisService.cs          | 305 ++++++++++++
+ Services/Analysis/IAnalysisService.cs         |  28 ++
+ Services/Git/GitService.cs                    | 110 +++++
+ Services/Git/IGitService.cs                   |  20 +
+ Services/GitHub/GitHubAppTokenProvider.cs     | 183 +++++++
+ Services/GitHub/GitHubService.cs              | 245 ++++++++++
+ Services/GitHub/IGitHubAppTokenProvider.cs    |  10 +
+ Services/GitHub/IGitHubService.cs             |  35 ++
+ appsettings.Development.json                  |  11 +
+ appsettings.json                              |  25 +
+ sw.err                                        |   0
+ 55 files changed, 3367 insertions(+)
+ create mode 100644 CodeRefine.Api.csproj
+ create mode 100644 CodeRefine.Api.http
+ create mode 100644 Configuration/AiServiceSettings.cs
+ create mode 100644 Configuration/GitHubSettings.cs
+ create mode 100644 Controllers/AnalysisController.cs
+ create mode 100644 Controllers/PullRequestsController.cs
+ create mode 100644 Controllers/RepositoriesController.cs
+ create mode 100644 Controllers/ReviewsController.cs
+ create mode 100644 DTOs/AiService/AnalyzeContracts.cs
+ create mode 100644 DTOs/Analysis/AnalysisResponse.cs
+ create mode 100644 DTOs/Analysis/FindingDto.cs
+ create mode 100644 DTOs/Analysis/PatchDto.cs
+ create mode 100644 DTOs/Analysis/StartAnalysisRequest.cs
+ create mode 100644 DTOs/Analysis/VerificationDto.cs
+ create mode 100644 DTOs/GitHub/BranchDto.cs
+ create mode 100644 DTOs/GitHub/PullRequestDto.cs
+ create mode 100644 DTOs/GitHub/PullRequestFileDto.cs
+ create mode 100644 DTOs/GitHub/RepositoryDto.cs
+ create mode 100644 DTOs/Review/ImprovementPrRequest.cs
+ create mode 100644 DTOs/Review/ReviewRequest.cs
+ create mode 100644 Data/AppDbContext.cs
+ create mode 100644 Data/Migrations/20260910060216_InitialCreate.Designer.cs
+ create mode 100644 Data/Migrations/20260910060216_InitialCreate.cs
+ create mode 100644 Data/Migrations/AppDbContextModelSnapshot.cs
+ create mode 100644 Enums/AnalysisStatus.cs
+ create mode 100644 Enums/FindingSeverity.cs
+ create mode 100644 Enums/FindingStatus.cs
+ create mode 100644 Enums/PatchStatus.cs
+ create mode 100644 Enums/ReviewDecision.cs
+ create mode 100644 Enums/VerificationCheckType.cs
+ create mode 100644 Enums/VerificationStatus.cs
+ create mode 100644 Exceptions/CodeRefineException.cs
+ create mode 100644 Middleware/ExceptionHandlingMiddleware.cs
+ create mode 100644 Models/AnalysisRun.cs
+ create mode 100644 Models/Finding.cs
+ create mode 100644 Models/Patch.cs
+ create mode 100644 Models/Repository.cs
+ create mode 100644 Models/Review.cs
+ create mode 100644 Models/User.cs
+ create mode 100644 Models/VerificationResult.cs
+ create mode 100644 Program.cs
+ create mode 100644 Properties/launchSettings.json
+ create mode 100644 Services/AI/AiService.cs
+ create mode 100644 Services/AI/IAiService.cs
+ create mode 100644 Services/Analysis/AnalysisService.cs
+ create mode 100644 Services/Analysis/IAnalysisService.cs
+ create mode 100644 Services/Git/GitService.cs
+ create mode 100644 Services/Git/IGitService.cs
+ create mode 100644 Services/GitHub/GitHubAppTokenProvider.cs
+ create mode 100644 Services/GitHub/GitHubService.cs
+ create mode 100644 Services/GitHub/IGitHubAppTokenProvider.cs
+ create mode 100644 Services/GitHub/IGitHubService.cs
+ create mode 100644 appsettings.Development.json
+ create mode 100644 appsettings.json
+ create mode 100644 sw.err
+
+diff --git a/CodeRefine.Api.csproj b/CodeRefine.Api.csproj
+new file mode 100644
+index 0000000..2e11045
+--- /dev/null
++++ b/CodeRefine.Api.csproj
+@@ -0,0 +1,21 @@
++﻿<Project Sdk="Microsoft.NET.Sdk.Web">
++
++  <PropertyGroup>
++    <TargetFramework>net9.0</TargetFramework>
++    <Nullable>enable</Nullable>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <UserSecretsId>76322663-fa58-4acd-8797-bc8e6d4a0863</UserSecretsId>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.18" />
++    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++      <PrivateAssets>all</PrivateAssets>
++    </PackageReference>
++    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
++    <PackageReference Include="Octokit" Version="13.0.1" />
++    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
++  </ItemGroup>
++
++</Project>
+diff --git a/CodeRefine.Api.http b/CodeRefine.Api.http
+new file mode 100644
+index 0000000..d520d39
+--- /dev/null
++++ b/CodeRefine.Api.http
+@@ -0,0 +1,6 @@
++@CodeRefine.Api_HostAddress = http://localhost:5019
++
++GET {{CodeRefine.Api_HostAddress}}/weatherforecast/
++Accept: application/json
++
++###
+diff --git a/Configuration/AiServiceSettings.cs b/Configuration/AiServiceSettings.cs
+new file mode 100644
+index 0000000..6ca1dc6
+--- /dev/null
++++ b/Configuration/AiServiceSettings.cs
+@@ -0,0 +1,14 @@
++namespace CodeRefine.Api.Configuration;
++
++/// <summary>
++/// Connection settings for the Python FastAPI/LangGraph service. Model and
++/// provider configuration belongs to the AI service, not to this backend.
++/// </summary>
++public class AiServiceSettings
++{
++    public const string SectionName = "AiService";
++
++    public string BaseUrl { get; set; } = string.Empty;
++
++    public int TimeoutSeconds { get; set; } = 300;
++}
+diff --git a/Configuration/GitHubSettings.cs b/Configuration/GitHubSettings.cs
+new file mode 100644
+index 0000000..145e3de
+--- /dev/null
++++ b/Configuration/GitHubSettings.cs
+@@ -0,0 +1,28 @@
++namespace CodeRefine.Api.Configuration;
++
++/// <summary>
++/// GitHub App credentials. These values stay inside the ASP.NET backend and are
++/// never forwarded to the frontend, the AI service or the sandbox.
++/// </summary>
++public class GitHubSettings
++{
++    public const string SectionName = "GitHub";
++
++    public string ApiBaseUrl { get; set; } = "https://api.github.com";
++
++    public string UserAgent { get; set; } = "CodeRefine";
++
++    /// <summary>GitHub App identifier.</summary>
++    public string AppId { get; set; } = string.Empty;
++
++    /// <summary>PEM private key used to sign the App JWT.</summary>
++    public string PrivateKey { get; set; } = string.Empty;
++
++    /// <summary>Installation used for the demo repository.</summary>
++    public long InstallationId { get; set; }
++
++    /// <summary>Committer name used for improvement commits.</summary>
++    public string CommitterName { get; set; } = "CodeRefine Bot";
++
++    public string CommitterEmail { get; set; } = "bot@coderefine.local";
++}
+diff --git a/Controllers/AnalysisController.cs b/Controllers/AnalysisController.cs
+new file mode 100644
+index 0000000..5d5bd83
+--- /dev/null
++++ b/Controllers/AnalysisController.cs
+@@ -0,0 +1,55 @@
++using CodeRefine.Api.DTOs.Analysis;
++using CodeRefine.Api.Services.Analysis;
++using Microsoft.AspNetCore.Mvc;
++
++namespace CodeRefine.Api.Controllers;
++
++[ApiController]
++[Route("api/analysis")]
++[Produces("application/json")]
++public class AnalysisController : ControllerBase
++{
++    private readonly IAnalysisService _analysisService;
++
++    public AnalysisController(IAnalysisService analysisService)
++    {
++        _analysisService = analysisService;
++    }
++
++    /// <summary>Starts an analysis run for a pull request or branch.</summary>
++    [HttpPost]
++    [ProducesResponseType(typeof(AnalysisResponse), StatusCodes.Status201Created)]
++    [ProducesResponseType(StatusCodes.Status400BadRequest)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    public async Task<ActionResult<AnalysisResponse>> StartAnalysis(
++        [FromBody] StartAnalysisRequest request,
++        CancellationToken cancellationToken)
++    {
++        var response = await _analysisService.StartAnalysisAsync(request, cancellationToken);
++        return CreatedAtAction(nameof(GetAnalysis), new { id = response.Id }, response);
++    }
++
++    [HttpGet("{id:guid}")]
++    [ProducesResponseType(typeof(AnalysisResponse), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    public async Task<ActionResult<AnalysisResponse>> GetAnalysis(Guid id, CancellationToken cancellationToken)
++        => Ok(await _analysisService.GetAnalysisAsync(id, cancellationToken));
++
++    [HttpGet("{id:guid}/findings")]
++    [ProducesResponseType(typeof(IReadOnlyList<FindingDto>), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    public async Task<ActionResult<IReadOnlyList<FindingDto>>> GetFindings(Guid id, CancellationToken cancellationToken)
++        => Ok(await _analysisService.GetFindingsAsync(id, cancellationToken));
++
++    [HttpGet("{id:guid}/patches")]
++    [ProducesResponseType(typeof(IReadOnlyList<PatchDto>), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    public async Task<ActionResult<IReadOnlyList<PatchDto>>> GetPatches(Guid id, CancellationToken cancellationToken)
++        => Ok(await _analysisService.GetPatchesAsync(id, cancellationToken));
++
++    [HttpGet("{id:guid}/verification")]
++    [ProducesResponseType(typeof(IReadOnlyList<VerificationDto>), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    public async Task<ActionResult<IReadOnlyList<VerificationDto>>> GetVerification(Guid id, CancellationToken cancellationToken)
++        => Ok(await _analysisService.GetVerificationAsync(id, cancellationToken));
++}
+diff --git a/Controllers/PullRequestsController.cs b/Controllers/PullRequestsController.cs
+new file mode 100644
+index 0000000..2f6e28e
+--- /dev/null
++++ b/Controllers/PullRequestsController.cs
+@@ -0,0 +1,42 @@
++using CodeRefine.Api.DTOs.GitHub;
++using CodeRefine.Api.Services.GitHub;
++using Microsoft.AspNetCore.Mvc;
++
++namespace CodeRefine.Api.Controllers;
++
++/// <summary>
++/// Pull request reads for a repository identified by its internal CodeRefine id.
++/// </summary>
++[ApiController]
++[Route("api/repositories/{id:guid}/pull-requests")]
++[Produces("application/json")]
++public class PullRequestsController : ControllerBase
++{
++    private readonly IGitHubService _gitHubService;
++
++    public PullRequestsController(IGitHubService gitHubService)
++    {
++        _gitHubService = gitHubService;
++    }
++
++    [HttpGet]
++    [ProducesResponseType(typeof(IReadOnlyList<PullRequestDto>), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    public async Task<ActionResult<IReadOnlyList<PullRequestDto>>> GetPullRequests(
++        Guid id,
++        [FromQuery] string state = "open",
++        CancellationToken cancellationToken = default)
++        => Ok(await _gitHubService.GetPullRequestsAsync(id, state, cancellationToken));
++
++    [HttpGet("{number:int}")]
++    [ProducesResponseType(typeof(PullRequestDto), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    public async Task<ActionResult<PullRequestDto>> GetPullRequest(Guid id, int number, CancellationToken cancellationToken)
++        => Ok(await _gitHubService.GetPullRequestAsync(id, number, cancellationToken));
++
++    [HttpGet("{number:int}/files")]
++    [ProducesResponseType(typeof(IReadOnlyList<PullRequestFileDto>), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    public async Task<ActionResult<IReadOnlyList<PullRequestFileDto>>> GetPullRequestFiles(Guid id, int number, CancellationToken cancellationToken)
++        => Ok(await _gitHubService.GetPullRequestFilesAsync(id, number, cancellationToken));
++}
+diff --git a/Controllers/RepositoriesController.cs b/Controllers/RepositoriesController.cs
+new file mode 100644
+index 0000000..b64cbf4
+--- /dev/null
++++ b/Controllers/RepositoriesController.cs
+@@ -0,0 +1,31 @@
++using CodeRefine.Api.DTOs.GitHub;
++using CodeRefine.Api.Services.GitHub;
++using Microsoft.AspNetCore.Mvc;
++
++namespace CodeRefine.Api.Controllers;
++
++[ApiController]
++[Route("api/repositories")]
++[Produces("application/json")]
++public class RepositoriesController : ControllerBase
++{
++    private readonly IGitHubService _gitHubService;
++
++    public RepositoriesController(IGitHubService gitHubService)
++    {
++        _gitHubService = gitHubService;
++    }
++
++    /// <summary>Lists repositories available to the CodeRefine GitHub App installation.</summary>
++    [HttpGet]
++    [ProducesResponseType(typeof(IReadOnlyList<RepositoryDto>), StatusCodes.Status200OK)]
++    public async Task<ActionResult<IReadOnlyList<RepositoryDto>>> GetRepositories(CancellationToken cancellationToken)
++        => Ok(await _gitHubService.GetRepositoriesAsync(cancellationToken));
++
++    /// <summary>Lists branches for a repository, identified by its internal CodeRefine id.</summary>
++    [HttpGet("{id:guid}/branches")]
++    [ProducesResponseType(typeof(IReadOnlyList<BranchDto>), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    public async Task<ActionResult<IReadOnlyList<BranchDto>>> GetBranches(Guid id, CancellationToken cancellationToken)
++        => Ok(await _gitHubService.GetBranchesAsync(id, cancellationToken));
++}
+diff --git a/Controllers/ReviewsController.cs b/Controllers/ReviewsController.cs
+new file mode 100644
+index 0000000..846e867
+--- /dev/null
++++ b/Controllers/ReviewsController.cs
+@@ -0,0 +1,67 @@
++using CodeRefine.Api.Data;
++using CodeRefine.Api.DTOs.Analysis;
++using CodeRefine.Api.DTOs.GitHub;
++using CodeRefine.Api.DTOs.Review;
++using CodeRefine.Api.Models;
++using CodeRefine.Api.Services.Analysis;
++using CodeRefine.Api.Services.GitHub;
++using Microsoft.AspNetCore.Mvc;
++using Microsoft.EntityFrameworkCore;
++
++namespace CodeRefine.Api.Controllers;
++
++/// <summary>
++/// Human review gate. Approval here is a precondition for any GitHub write.
++/// </summary>
++[ApiController]
++[Route("api/analysis/{id:guid}")]
++[Produces("application/json")]
++public class ReviewsController : ControllerBase
++{
++    private readonly AppDbContext _dbContext;
++    private readonly IGitHubService _gitHubService;
++    private readonly IAnalysisService _analysisService;
++
++    public ReviewsController(AppDbContext dbContext, IGitHubService gitHubService, IAnalysisService analysisService)
++    {
++        _dbContext = dbContext;
++        _gitHubService = gitHubService;
++        _analysisService = analysisService;
++    }
++
++    [HttpPost("approve")]
++    [ProducesResponseType(typeof(AnalysisResponse), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status400BadRequest)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    [ProducesResponseType(StatusCodes.Status409Conflict)]
++    public async Task<ActionResult<AnalysisResponse>> Approve(
++        Guid id,
++        [FromBody] ReviewRequest request,
++        CancellationToken cancellationToken)
++        => Ok(await _analysisService.ApproveAsync(id, request, cancellationToken));
++
++    [HttpPost("reject")]
++    [ProducesResponseType(typeof(AnalysisResponse), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status400BadRequest)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    [ProducesResponseType(StatusCodes.Status409Conflict)]
++    public async Task<ActionResult<AnalysisResponse>> Reject(
++        Guid id,
++        [FromBody] ReviewRequest request,
++        CancellationToken cancellationToken)
++        => Ok(await _analysisService.RejectAsync(id, request, cancellationToken));
++
++    /// <summary>
++    /// Creates the improvement pull request. Requires human approval and passing
++    /// verification; the backend rejects the request otherwise.
++    /// </summary>
++    [HttpPost("create-improvement-pr")]
++    [ProducesResponseType(typeof(PullRequestDto), StatusCodes.Status200OK)]
++    [ProducesResponseType(StatusCodes.Status404NotFound)]
++    [ProducesResponseType(StatusCodes.Status409Conflict)]
++    public async Task<ActionResult<PullRequestDto>> CreateImprovementPullRequest(
++        Guid id,
++        [FromBody] ImprovementPrRequest request,
++        CancellationToken cancellationToken)
++        => Ok(await _analysisService.CreateImprovementPullRequestAsync(id, request, cancellationToken));
++}
+diff --git a/DTOs/AiService/AnalyzeContracts.cs b/DTOs/AiService/AnalyzeContracts.cs
+new file mode 100644
+index 0000000..b067822
+--- /dev/null
++++ b/DTOs/AiService/AnalyzeContracts.cs
+@@ -0,0 +1,37 @@
++namespace CodeRefine.Api.DTOs.AiService;
++
++/// <summary>
++/// Request sent to the FastAPI service (POST /analyze). Shared contract with
++/// Developer 2; keep in sync and do not leak GitHub credentials into it.
++/// </summary>
++public class AnalyzeRequest
++{
++    public string AnalysisId { get; set; } = string.Empty;
++    public string RepositoryPath { get; set; } = string.Empty;
++    public IReadOnlyList<string> ChangedFiles { get; set; } = new List<string>();
++    public string Language { get; set; } = string.Empty;
++    public IReadOnlyList<string> Agents { get; set; } = new List<string>();
++}
++
++/// <summary>Finding returned by an AI agent.</summary>
++public class AgentFindingDto
++{
++    public string Agent { get; set; } = string.Empty;
++    public string File { get; set; } = string.Empty;
++    public int StartLine { get; set; }
++    public int EndLine { get; set; }
++    public string Severity { get; set; } = string.Empty;
++    public string? Category { get; set; }
++    public string Title { get; set; } = string.Empty;
++    public string? Description { get; set; }
++    public string? Recommendation { get; set; }
++    public double Confidence { get; set; }
++    public bool FixAvailable { get; set; }
++}
++
++public class AnalyzeResponse
++{
++    public string AnalysisId { get; set; } = string.Empty;
++    public IReadOnlyList<AgentFindingDto> Findings { get; set; } = new List<AgentFindingDto>();
++    public double? QualityScore { get; set; }
++}
+diff --git a/DTOs/Analysis/AnalysisResponse.cs b/DTOs/Analysis/AnalysisResponse.cs
+new file mode 100644
+index 0000000..e496fe6
+--- /dev/null
++++ b/DTOs/Analysis/AnalysisResponse.cs
+@@ -0,0 +1,25 @@
++using CodeRefine.Api.Enums;
++
++namespace CodeRefine.Api.DTOs.Analysis;
++
++public class AnalysisResponse
++{
++    public Guid Id { get; set; }
++    public Guid RepositoryId { get; set; }
++    public string RepositoryFullName { get; set; } = string.Empty;
++    public int? PullRequestNumber { get; set; }
++    public string? SourceBranch { get; set; }
++    public string? TargetBranch { get; set; }
++    public string? CommitSha { get; set; }
++    public AnalysisStatus Status { get; set; }
++    public string? ErrorMessage { get; set; }
++    public double? QualityScoreBefore { get; set; }
++    public double? QualityScoreAfter { get; set; }
++    public string? ImprovementBranch { get; set; }
++    public int? ImprovementPrNumber { get; set; }
++    public string? ImprovementPrUrl { get; set; }
++    public DateTime StartedAt { get; set; }
++    public DateTime? CompletedAt { get; set; }
++    public int FindingCount { get; set; }
++    public IReadOnlyList<FindingDto> Findings { get; set; } = new List<FindingDto>();
++}
+diff --git a/DTOs/Analysis/FindingDto.cs b/DTOs/Analysis/FindingDto.cs
+new file mode 100644
+index 0000000..98a670c
+--- /dev/null
++++ b/DTOs/Analysis/FindingDto.cs
+@@ -0,0 +1,21 @@
++using CodeRefine.Api.Enums;
++
++namespace CodeRefine.Api.DTOs.Analysis;
++
++public class FindingDto
++{
++    public Guid Id { get; set; }
++    public string AgentType { get; set; } = string.Empty;
++    public string FilePath { get; set; } = string.Empty;
++    public int StartLine { get; set; }
++    public int EndLine { get; set; }
++    public string? Category { get; set; }
++    public FindingSeverity Severity { get; set; }
++    public string Title { get; set; } = string.Empty;
++    public string? Description { get; set; }
++    public string? Recommendation { get; set; }
++    public double Confidence { get; set; }
++    public FindingStatus Status { get; set; }
++    public DateTime CreatedAt { get; set; }
++    public IReadOnlyList<PatchDto> Patches { get; set; } = new List<PatchDto>();
++}
+diff --git a/DTOs/Analysis/PatchDto.cs b/DTOs/Analysis/PatchDto.cs
+new file mode 100644
+index 0000000..093dfb6
+--- /dev/null
++++ b/DTOs/Analysis/PatchDto.cs
+@@ -0,0 +1,16 @@
++using CodeRefine.Api.Enums;
++
++namespace CodeRefine.Api.DTOs.Analysis;
++
++public class PatchDto
++{
++    public Guid Id { get; set; }
++    public Guid FindingId { get; set; }
++    public string FilePath { get; set; } = string.Empty;
++    public string OriginalCode { get; set; } = string.Empty;
++    public string ProposedCode { get; set; } = string.Empty;
++    public string Diff { get; set; } = string.Empty;
++    public string? Explanation { get; set; }
++    public PatchStatus Status { get; set; }
++    public DateTime CreatedAt { get; set; }
++}
+diff --git a/DTOs/Analysis/StartAnalysisRequest.cs b/DTOs/Analysis/StartAnalysisRequest.cs
+new file mode 100644
+index 0000000..62ca49e
+--- /dev/null
++++ b/DTOs/Analysis/StartAnalysisRequest.cs
+@@ -0,0 +1,16 @@
++using System.ComponentModel.DataAnnotations;
++
++namespace CodeRefine.Api.DTOs.Analysis;
++
++public class StartAnalysisRequest
++{
++    /// <summary>Internal CodeRefine repository identifier.</summary>
++    [Required]
++    public Guid RepositoryId { get; set; }
++
++    /// <summary>Pull request to analyse. Required when no branch is supplied.</summary>
++    public int? PullRequestNumber { get; set; }
++
++    /// <summary>Branch to analyse when running outside a pull request.</summary>
++    public string? Branch { get; set; }
++}
+diff --git a/DTOs/Analysis/VerificationDto.cs b/DTOs/Analysis/VerificationDto.cs
+new file mode 100644
+index 0000000..6ee6c95
+--- /dev/null
++++ b/DTOs/Analysis/VerificationDto.cs
+@@ -0,0 +1,14 @@
++using CodeRefine.Api.Enums;
++
++namespace CodeRefine.Api.DTOs.Analysis;
++
++public class VerificationDto
++{
++    public Guid Id { get; set; }
++    public Guid AnalysisRunId { get; set; }
++    public VerificationCheckType CheckType { get; set; }
++    public VerificationStatus Status { get; set; }
++    public string? Output { get; set; }
++    public long DurationMs { get; set; }
++    public DateTime CreatedAt { get; set; }
++}
+diff --git a/DTOs/GitHub/BranchDto.cs b/DTOs/GitHub/BranchDto.cs
+new file mode 100644
+index 0000000..ad72266
+--- /dev/null
++++ b/DTOs/GitHub/BranchDto.cs
+@@ -0,0 +1,9 @@
++namespace CodeRefine.Api.DTOs.GitHub;
++
++public class BranchDto
++{
++    public string Name { get; set; } = string.Empty;
++    public string CommitSha { get; set; } = string.Empty;
++    public bool IsProtected { get; set; }
++    public bool IsDefault { get; set; }
++}
+diff --git a/DTOs/GitHub/PullRequestDto.cs b/DTOs/GitHub/PullRequestDto.cs
+new file mode 100644
+index 0000000..25bcfe0
+--- /dev/null
++++ b/DTOs/GitHub/PullRequestDto.cs
+@@ -0,0 +1,19 @@
++namespace CodeRefine.Api.DTOs.GitHub;
++
++public class PullRequestDto
++{
++    public int Number { get; set; }
++    public string Title { get; set; } = string.Empty;
++    public string? Body { get; set; }
++    public string State { get; set; } = string.Empty;
++    public string? AuthorLogin { get; set; }
++    public string HeadBranch { get; set; } = string.Empty;
++    public string BaseBranch { get; set; } = string.Empty;
++    public string HeadSha { get; set; } = string.Empty;
++    public string? HtmlUrl { get; set; }
++    public int ChangedFiles { get; set; }
++    public int Additions { get; set; }
++    public int Deletions { get; set; }
++    public DateTime CreatedAt { get; set; }
++    public DateTime? UpdatedAt { get; set; }
++}
+diff --git a/DTOs/GitHub/PullRequestFileDto.cs b/DTOs/GitHub/PullRequestFileDto.cs
+new file mode 100644
+index 0000000..c3f2e6f
+--- /dev/null
++++ b/DTOs/GitHub/PullRequestFileDto.cs
+@@ -0,0 +1,12 @@
++namespace CodeRefine.Api.DTOs.GitHub;
++
++public class PullRequestFileDto
++{
++    public string FileName { get; set; } = string.Empty;
++    public string Status { get; set; } = string.Empty;
++    public int Additions { get; set; }
++    public int Deletions { get; set; }
++    public int Changes { get; set; }
++    public string? Patch { get; set; }
++    public string? ContentsUrl { get; set; }
++}
+diff --git a/DTOs/GitHub/RepositoryDto.cs b/DTOs/GitHub/RepositoryDto.cs
+new file mode 100644
+index 0000000..89c6b59
+--- /dev/null
++++ b/DTOs/GitHub/RepositoryDto.cs
+@@ -0,0 +1,14 @@
++namespace CodeRefine.Api.DTOs.GitHub;
++
++public class RepositoryDto
++{
++    /// <summary>Internal CodeRefine identifier used by all API routes.</summary>
++    public Guid Id { get; set; }
++
++    public string Owner { get; set; } = string.Empty;
++    public string Name { get; set; } = string.Empty;
++    public string FullName { get; set; } = string.Empty;
++    public string DefaultBranch { get; set; } = "main";
++    public bool IsPrivate { get; set; }
++    public DateTime CreatedAt { get; set; }
++}
+diff --git a/DTOs/Review/ImprovementPrRequest.cs b/DTOs/Review/ImprovementPrRequest.cs
+new file mode 100644
+index 0000000..12f15d1
+--- /dev/null
++++ b/DTOs/Review/ImprovementPrRequest.cs
+@@ -0,0 +1,16 @@
++using System.ComponentModel.DataAnnotations;
++
++namespace CodeRefine.Api.DTOs.Review;
++
++public class ImprovementPrRequest
++{
++    /// <summary>Optional override for the generated pull request title.</summary>
++    [MaxLength(300)]
++    public string? Title { get; set; }
++
++    /// <summary>Optional override for the generated pull request body.</summary>
++    public string? Body { get; set; }
++
++    /// <summary>Base branch for the improvement pull request. Defaults to the analysed branch.</summary>
++    public string? BaseBranch { get; set; }
++}
+diff --git a/DTOs/Review/ReviewRequest.cs b/DTOs/Review/ReviewRequest.cs
+new file mode 100644
+index 0000000..d99b8cb
+--- /dev/null
++++ b/DTOs/Review/ReviewRequest.cs
+@@ -0,0 +1,15 @@
++using System.ComponentModel.DataAnnotations;
++
++namespace CodeRefine.Api.DTOs.Review;
++
++public class ReviewRequest
++{
++    /// <summary>Optional subset of findings the decision applies to. Empty means the whole run.</summary>
++    public IReadOnlyList<Guid> FindingIds { get; set; } = new List<Guid>();
++
++    /// <summary>Optional subset of patches the decision applies to. Empty means all verified patches.</summary>
++    public IReadOnlyList<Guid> PatchIds { get; set; } = new List<Guid>();
++
++    [MaxLength(2000)]
++    public string? Comment { get; set; }
++}
+diff --git a/Data/AppDbContext.cs b/Data/AppDbContext.cs
+new file mode 100644
+index 0000000..fced94b
+--- /dev/null
++++ b/Data/AppDbContext.cs
+@@ -0,0 +1,111 @@
++using CodeRefine.Api.Models;
++using Microsoft.EntityFrameworkCore;
++
++namespace CodeRefine.Api.Data;
++
++public class AppDbContext : DbContext
++{
++    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
++    {
++    }
++
++    public DbSet<User> Users => Set<User>();
++    public DbSet<Repository> Repositories => Set<Repository>();
++    public DbSet<AnalysisRun> AnalysisRuns => Set<AnalysisRun>();
++    public DbSet<Finding> Findings => Set<Finding>();
++    public DbSet<Patch> Patches => Set<Patch>();
++    public DbSet<VerificationResult> VerificationResults => Set<VerificationResult>();
++    public DbSet<Review> Reviews => Set<Review>();
++
++    protected override void OnModelCreating(ModelBuilder modelBuilder)
++    {
++        base.OnModelCreating(modelBuilder);
++
++        modelBuilder.Entity<User>(entity =>
++        {
++            entity.HasKey(e => e.Id);
++            entity.Property(e => e.GitHubLogin).IsRequired().HasMaxLength(200);
++            entity.HasIndex(e => e.GitHubLogin).IsUnique();
++        });
++
++        modelBuilder.Entity<Repository>(entity =>
++        {
++            entity.HasKey(e => e.Id);
++            entity.Ignore(e => e.FullName);
++            entity.Property(e => e.Owner).IsRequired().HasMaxLength(200);
++            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
++            entity.Property(e => e.GitHubRepoId).HasMaxLength(100);
++            entity.HasIndex(e => new { e.Owner, e.Name }).IsUnique();
++            entity.HasOne(e => e.User)
++                .WithMany(u => u.Repositories)
++                .HasForeignKey(e => e.UserId)
++                .OnDelete(DeleteBehavior.SetNull);
++        });
++
++        modelBuilder.Entity<AnalysisRun>(entity =>
++        {
++            entity.HasKey(e => e.Id);
++            entity.HasIndex(e => new { e.RepositoryId, e.StartedAt });
++            entity.HasOne(e => e.Repository)
++                .WithMany(r => r.AnalysisRuns)
++                .HasForeignKey(e => e.RepositoryId)
++                .OnDelete(DeleteBehavior.Cascade);
++        });
++
++        modelBuilder.Entity<Finding>(entity =>
++        {
++            entity.HasKey(e => e.Id);
++            entity.Property(e => e.Title).IsRequired().HasMaxLength(500);
++            entity.Property(e => e.AgentType).IsRequired().HasMaxLength(100);
++            entity.Property(e => e.FilePath).IsRequired().HasMaxLength(1000);
++            entity.HasIndex(e => e.AnalysisRunId);
++            entity.HasOne(e => e.AnalysisRun)
++                .WithMany(a => a.Findings)
++                .HasForeignKey(e => e.AnalysisRunId)
++                .OnDelete(DeleteBehavior.Cascade);
++        });
++
++        modelBuilder.Entity<Patch>(entity =>
++        {
++            entity.HasKey(e => e.Id);
++            entity.Property(e => e.FilePath).IsRequired().HasMaxLength(1000);
++            entity.HasIndex(e => e.FindingId);
++            entity.HasOne(e => e.Finding)
++                .WithMany(f => f.Patches)
++                .HasForeignKey(e => e.FindingId)
++                .OnDelete(DeleteBehavior.Cascade);
++        });
++
++        modelBuilder.Entity<VerificationResult>(entity =>
++        {
++            entity.HasKey(e => e.Id);
++            entity.HasIndex(e => new { e.AnalysisRunId, e.CheckType });
++            entity.HasOne(e => e.AnalysisRun)
++                .WithMany(a => a.VerificationResults)
++                .HasForeignKey(e => e.AnalysisRunId)
++                .OnDelete(DeleteBehavior.Cascade);
++        });
++
++        modelBuilder.Entity<Review>(entity =>
++        {
++            entity.HasKey(e => e.Id);
++            entity.HasIndex(e => e.AnalysisRunId);
++            entity.HasOne(e => e.AnalysisRun)
++                .WithMany(a => a.Reviews)
++                .HasForeignKey(e => e.AnalysisRunId)
++                .OnDelete(DeleteBehavior.Cascade);
++            entity.HasOne(e => e.Finding)
++                .WithMany(f => f.Reviews)
++                .HasForeignKey(e => e.FindingId)
++                .OnDelete(DeleteBehavior.Cascade);
++            entity.HasOne(e => e.Patch)
++                .WithMany(p => p.Reviews)
++                .HasForeignKey(e => e.PatchId)
++                .OnDelete(DeleteBehavior.Cascade);
++            entity.HasOne(e => e.User)
++                .WithMany(u => u.Reviews)
++                .HasForeignKey(e => e.UserId)
++                .OnDelete(DeleteBehavior.SetNull);
++        });
++    }
++}
+diff --git a/Data/Migrations/20260910060216_InitialCreate.Designer.cs b/Data/Migrations/20260910060216_InitialCreate.Designer.cs
+new file mode 100644
+index 0000000..f999af4
+--- /dev/null
++++ b/Data/Migrations/20260910060216_InitialCreate.Designer.cs
+@@ -0,0 +1,453 @@
++﻿// <auto-generated />
++using System;
++using CodeRefine.Api.Data;
++using Microsoft.EntityFrameworkCore;
++using Microsoft.EntityFrameworkCore.Infrastructure;
++using Microsoft.EntityFrameworkCore.Migrations;
++using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
++using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
++
++#nullable disable
++
++namespace CodeRefine.Api.Data.Migrations
++{
++    [DbContext(typeof(AppDbContext))]
++    [Migration("20260910060216_InitialCreate")]
++    partial class InitialCreate
++    {
++        /// <inheritdoc />
++        protected override void BuildTargetModel(ModelBuilder modelBuilder)
++        {
++#pragma warning disable 612, 618
++            modelBuilder
++                .HasAnnotation("ProductVersion", "9.0.1")
++                .HasAnnotation("Relational:MaxIdentifierLength", 63);
++
++            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
++
++            modelBuilder.Entity("CodeRefine.Api.Models.AnalysisRun", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("CommitSha")
++                        .HasColumnType("text");
++
++                    b.Property<DateTime?>("CompletedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("ErrorMessage")
++                        .HasColumnType("text");
++
++                    b.Property<string>("ImprovementBranch")
++                        .HasColumnType("text");
++
++                    b.Property<int?>("ImprovementPrNumber")
++                        .HasColumnType("integer");
++
++                    b.Property<string>("ImprovementPrUrl")
++                        .HasColumnType("text");
++
++                    b.Property<int?>("PullRequestNumber")
++                        .HasColumnType("integer");
++
++                    b.Property<double?>("QualityScoreAfter")
++                        .HasColumnType("double precision");
++
++                    b.Property<double?>("QualityScoreBefore")
++                        .HasColumnType("double precision");
++
++                    b.Property<Guid>("RepositoryId")
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("SourceBranch")
++                        .HasColumnType("text");
++
++                    b.Property<DateTime>("StartedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<int>("Status")
++                        .HasColumnType("integer");
++
++                    b.Property<string>("TargetBranch")
++                        .HasColumnType("text");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("RepositoryId", "StartedAt");
++
++                    b.ToTable("AnalysisRuns");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Finding", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("AgentType")
++                        .IsRequired()
++                        .HasMaxLength(100)
++                        .HasColumnType("character varying(100)");
++
++                    b.Property<Guid>("AnalysisRunId")
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("Category")
++                        .HasColumnType("text");
++
++                    b.Property<double>("Confidence")
++                        .HasColumnType("double precision");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("Description")
++                        .HasColumnType("text");
++
++                    b.Property<int>("EndLine")
++                        .HasColumnType("integer");
++
++                    b.Property<string>("FilePath")
++                        .IsRequired()
++                        .HasMaxLength(1000)
++                        .HasColumnType("character varying(1000)");
++
++                    b.Property<string>("Recommendation")
++                        .HasColumnType("text");
++
++                    b.Property<int>("Severity")
++                        .HasColumnType("integer");
++
++                    b.Property<int>("StartLine")
++                        .HasColumnType("integer");
++
++                    b.Property<int>("Status")
++                        .HasColumnType("integer");
++
++                    b.Property<string>("Title")
++                        .IsRequired()
++                        .HasMaxLength(500)
++                        .HasColumnType("character varying(500)");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("AnalysisRunId");
++
++                    b.ToTable("Findings");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Patch", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("Diff")
++                        .IsRequired()
++                        .HasColumnType("text");
++
++                    b.Property<string>("Explanation")
++                        .HasColumnType("text");
++
++                    b.Property<string>("FilePath")
++                        .IsRequired()
++                        .HasMaxLength(1000)
++                        .HasColumnType("character varying(1000)");
++
++                    b.Property<Guid>("FindingId")
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("OriginalCode")
++                        .IsRequired()
++                        .HasColumnType("text");
++
++                    b.Property<string>("ProposedCode")
++                        .IsRequired()
++                        .HasColumnType("text");
++
++                    b.Property<int>("Status")
++                        .HasColumnType("integer");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("FindingId");
++
++                    b.ToTable("Patches");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Repository", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("DefaultBranch")
++                        .IsRequired()
++                        .HasColumnType("text");
++
++                    b.Property<string>("GitHubRepoId")
++                        .IsRequired()
++                        .HasMaxLength(100)
++                        .HasColumnType("character varying(100)");
++
++                    b.Property<long?>("InstallationId")
++                        .HasColumnType("bigint");
++
++                    b.Property<bool>("IsPrivate")
++                        .HasColumnType("boolean");
++
++                    b.Property<string>("Name")
++                        .IsRequired()
++                        .HasMaxLength(200)
++                        .HasColumnType("character varying(200)");
++
++                    b.Property<string>("Owner")
++                        .IsRequired()
++                        .HasMaxLength(200)
++                        .HasColumnType("character varying(200)");
++
++                    b.Property<Guid?>("UserId")
++                        .HasColumnType("uuid");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("UserId");
++
++                    b.HasIndex("Owner", "Name")
++                        .IsUnique();
++
++                    b.ToTable("Repositories");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Review", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<Guid>("AnalysisRunId")
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("Comment")
++                        .HasColumnType("text");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<int>("Decision")
++                        .HasColumnType("integer");
++
++                    b.Property<Guid?>("FindingId")
++                        .HasColumnType("uuid");
++
++                    b.Property<Guid?>("PatchId")
++                        .HasColumnType("uuid");
++
++                    b.Property<Guid?>("UserId")
++                        .HasColumnType("uuid");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("AnalysisRunId");
++
++                    b.HasIndex("FindingId");
++
++                    b.HasIndex("PatchId");
++
++                    b.HasIndex("UserId");
++
++                    b.ToTable("Reviews");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.User", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("AvatarUrl")
++                        .HasColumnType("text");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("DisplayName")
++                        .HasColumnType("text");
++
++                    b.Property<string>("Email")
++                        .HasColumnType("text");
++
++                    b.Property<string>("GitHubLogin")
++                        .IsRequired()
++                        .HasMaxLength(200)
++                        .HasColumnType("character varying(200)");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("GitHubLogin")
++                        .IsUnique();
++
++                    b.ToTable("Users");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.VerificationResult", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<Guid>("AnalysisRunId")
++                        .HasColumnType("uuid");
++
++                    b.Property<int>("CheckType")
++                        .HasColumnType("integer");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<long>("DurationMs")
++                        .HasColumnType("bigint");
++
++                    b.Property<string>("Output")
++                        .HasColumnType("text");
++
++                    b.Property<int>("Status")
++                        .HasColumnType("integer");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("AnalysisRunId", "CheckType");
++
++                    b.ToTable("VerificationResults");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.AnalysisRun", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.Repository", "Repository")
++                        .WithMany("AnalysisRuns")
++                        .HasForeignKey("RepositoryId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.Navigation("Repository");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Finding", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.AnalysisRun", "AnalysisRun")
++                        .WithMany("Findings")
++                        .HasForeignKey("AnalysisRunId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.Navigation("AnalysisRun");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Patch", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.Finding", "Finding")
++                        .WithMany("Patches")
++                        .HasForeignKey("FindingId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.Navigation("Finding");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Repository", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.User", "User")
++                        .WithMany("Repositories")
++                        .HasForeignKey("UserId")
++                        .OnDelete(DeleteBehavior.SetNull);
++
++                    b.Navigation("User");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Review", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.AnalysisRun", "AnalysisRun")
++                        .WithMany("Reviews")
++                        .HasForeignKey("AnalysisRunId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.HasOne("CodeRefine.Api.Models.Finding", "Finding")
++                        .WithMany("Reviews")
++                        .HasForeignKey("FindingId")
++                        .OnDelete(DeleteBehavior.Cascade);
++
++                    b.HasOne("CodeRefine.Api.Models.Patch", "Patch")
++                        .WithMany("Reviews")
++                        .HasForeignKey("PatchId")
++                        .OnDelete(DeleteBehavior.Cascade);
++
++                    b.HasOne("CodeRefine.Api.Models.User", "User")
++                        .WithMany("Reviews")
++                        .HasForeignKey("UserId")
++                        .OnDelete(DeleteBehavior.SetNull);
++
++                    b.Navigation("AnalysisRun");
++
++                    b.Navigation("Finding");
++
++                    b.Navigation("Patch");
++
++                    b.Navigation("User");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.VerificationResult", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.AnalysisRun", "AnalysisRun")
++                        .WithMany("VerificationResults")
++                        .HasForeignKey("AnalysisRunId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.Navigation("AnalysisRun");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.AnalysisRun", b =>
++                {
++                    b.Navigation("Findings");
++
++                    b.Navigation("Reviews");
++
++                    b.Navigation("VerificationResults");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Finding", b =>
++                {
++                    b.Navigation("Patches");
++
++                    b.Navigation("Reviews");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Patch", b =>
++                {
++                    b.Navigation("Reviews");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Repository", b =>
++                {
++                    b.Navigation("AnalysisRuns");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.User", b =>
++                {
++                    b.Navigation("Repositories");
++
++                    b.Navigation("Reviews");
++                });
++#pragma warning restore 612, 618
++        }
++    }
++}
+diff --git a/Data/Migrations/20260910060216_InitialCreate.cs b/Data/Migrations/20260910060216_InitialCreate.cs
+new file mode 100644
+index 0000000..8b7ab6a
+--- /dev/null
++++ b/Data/Migrations/20260910060216_InitialCreate.cs
+@@ -0,0 +1,289 @@
++﻿using System;
++using Microsoft.EntityFrameworkCore.Migrations;
++
++#nullable disable
++
++namespace CodeRefine.Api.Data.Migrations
++{
++    /// <inheritdoc />
++    public partial class InitialCreate : Migration
++    {
++        /// <inheritdoc />
++        protected override void Up(MigrationBuilder migrationBuilder)
++        {
++            migrationBuilder.CreateTable(
++                name: "Users",
++                columns: table => new
++                {
++                    Id = table.Column<Guid>(type: "uuid", nullable: false),
++                    GitHubLogin = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
++                    DisplayName = table.Column<string>(type: "text", nullable: true),
++                    Email = table.Column<string>(type: "text", nullable: true),
++                    AvatarUrl = table.Column<string>(type: "text", nullable: true),
++                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
++                },
++                constraints: table =>
++                {
++                    table.PrimaryKey("PK_Users", x => x.Id);
++                });
++
++            migrationBuilder.CreateTable(
++                name: "Repositories",
++                columns: table => new
++                {
++                    Id = table.Column<Guid>(type: "uuid", nullable: false),
++                    UserId = table.Column<Guid>(type: "uuid", nullable: true),
++                    GitHubRepoId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
++                    Owner = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
++                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
++                    DefaultBranch = table.Column<string>(type: "text", nullable: false),
++                    InstallationId = table.Column<long>(type: "bigint", nullable: true),
++                    IsPrivate = table.Column<bool>(type: "boolean", nullable: false),
++                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
++                },
++                constraints: table =>
++                {
++                    table.PrimaryKey("PK_Repositories", x => x.Id);
++                    table.ForeignKey(
++                        name: "FK_Repositories_Users_UserId",
++                        column: x => x.UserId,
++                        principalTable: "Users",
++                        principalColumn: "Id",
++                        onDelete: ReferentialAction.SetNull);
++                });
++
++            migrationBuilder.CreateTable(
++                name: "AnalysisRuns",
++                columns: table => new
++                {
++                    Id = table.Column<Guid>(type: "uuid", nullable: false),
++                    RepositoryId = table.Column<Guid>(type: "uuid", nullable: false),
++                    PullRequestNumber = table.Column<int>(type: "integer", nullable: true),
++                    SourceBranch = table.Column<string>(type: "text", nullable: true),
++                    TargetBranch = table.Column<string>(type: "text", nullable: true),
++                    CommitSha = table.Column<string>(type: "text", nullable: true),
++                    Status = table.Column<int>(type: "integer", nullable: false),
++                    ErrorMessage = table.Column<string>(type: "text", nullable: true),
++                    QualityScoreBefore = table.Column<double>(type: "double precision", nullable: true),
++                    QualityScoreAfter = table.Column<double>(type: "double precision", nullable: true),
++                    ImprovementBranch = table.Column<string>(type: "text", nullable: true),
++                    ImprovementPrNumber = table.Column<int>(type: "integer", nullable: true),
++                    ImprovementPrUrl = table.Column<string>(type: "text", nullable: true),
++                    StartedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
++                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
++                },
++                constraints: table =>
++                {
++                    table.PrimaryKey("PK_AnalysisRuns", x => x.Id);
++                    table.ForeignKey(
++                        name: "FK_AnalysisRuns_Repositories_RepositoryId",
++                        column: x => x.RepositoryId,
++                        principalTable: "Repositories",
++                        principalColumn: "Id",
++                        onDelete: ReferentialAction.Cascade);
++                });
++
++            migrationBuilder.CreateTable(
++                name: "Findings",
++                columns: table => new
++                {
++                    Id = table.Column<Guid>(type: "uuid", nullable: false),
++                    AnalysisRunId = table.Column<Guid>(type: "uuid", nullable: false),
++                    AgentType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
++                    FilePath = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
++                    StartLine = table.Column<int>(type: "integer", nullable: false),
++                    EndLine = table.Column<int>(type: "integer", nullable: false),
++                    Category = table.Column<string>(type: "text", nullable: true),
++                    Severity = table.Column<int>(type: "integer", nullable: false),
++                    Title = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
++                    Description = table.Column<string>(type: "text", nullable: true),
++                    Recommendation = table.Column<string>(type: "text", nullable: true),
++                    Confidence = table.Column<double>(type: "double precision", nullable: false),
++                    Status = table.Column<int>(type: "integer", nullable: false),
++                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
++                },
++                constraints: table =>
++                {
++                    table.PrimaryKey("PK_Findings", x => x.Id);
++                    table.ForeignKey(
++                        name: "FK_Findings_AnalysisRuns_AnalysisRunId",
++                        column: x => x.AnalysisRunId,
++                        principalTable: "AnalysisRuns",
++                        principalColumn: "Id",
++                        onDelete: ReferentialAction.Cascade);
++                });
++
++            migrationBuilder.CreateTable(
++                name: "VerificationResults",
++                columns: table => new
++                {
++                    Id = table.Column<Guid>(type: "uuid", nullable: false),
++                    AnalysisRunId = table.Column<Guid>(type: "uuid", nullable: false),
++                    CheckType = table.Column<int>(type: "integer", nullable: false),
++                    Status = table.Column<int>(type: "integer", nullable: false),
++                    Output = table.Column<string>(type: "text", nullable: true),
++                    DurationMs = table.Column<long>(type: "bigint", nullable: false),
++                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
++                },
++                constraints: table =>
++                {
++                    table.PrimaryKey("PK_VerificationResults", x => x.Id);
++                    table.ForeignKey(
++                        name: "FK_VerificationResults_AnalysisRuns_AnalysisRunId",
++                        column: x => x.AnalysisRunId,
++                        principalTable: "AnalysisRuns",
++                        principalColumn: "Id",
++                        onDelete: ReferentialAction.Cascade);
++                });
++
++            migrationBuilder.CreateTable(
++                name: "Patches",
++                columns: table => new
++                {
++                    Id = table.Column<Guid>(type: "uuid", nullable: false),
++                    FindingId = table.Column<Guid>(type: "uuid", nullable: false),
++                    FilePath = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
++                    OriginalCode = table.Column<string>(type: "text", nullable: false),
++                    ProposedCode = table.Column<string>(type: "text", nullable: false),
++                    Diff = table.Column<string>(type: "text", nullable: false),
++                    Explanation = table.Column<string>(type: "text", nullable: true),
++                    Status = table.Column<int>(type: "integer", nullable: false),
++                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
++                },
++                constraints: table =>
++                {
++                    table.PrimaryKey("PK_Patches", x => x.Id);
++                    table.ForeignKey(
++                        name: "FK_Patches_Findings_FindingId",
++                        column: x => x.FindingId,
++                        principalTable: "Findings",
++                        principalColumn: "Id",
++                        onDelete: ReferentialAction.Cascade);
++                });
++
++            migrationBuilder.CreateTable(
++                name: "Reviews",
++                columns: table => new
++                {
++                    Id = table.Column<Guid>(type: "uuid", nullable: false),
++                    AnalysisRunId = table.Column<Guid>(type: "uuid", nullable: false),
++                    FindingId = table.Column<Guid>(type: "uuid", nullable: true),
++                    PatchId = table.Column<Guid>(type: "uuid", nullable: true),
++                    UserId = table.Column<Guid>(type: "uuid", nullable: true),
++                    Decision = table.Column<int>(type: "integer", nullable: false),
++                    Comment = table.Column<string>(type: "text", nullable: true),
++                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
++                },
++                constraints: table =>
++                {
++                    table.PrimaryKey("PK_Reviews", x => x.Id);
++                    table.ForeignKey(
++                        name: "FK_Reviews_AnalysisRuns_AnalysisRunId",
++                        column: x => x.AnalysisRunId,
++                        principalTable: "AnalysisRuns",
++                        principalColumn: "Id",
++                        onDelete: ReferentialAction.Cascade);
++                    table.ForeignKey(
++                        name: "FK_Reviews_Findings_FindingId",
++                        column: x => x.FindingId,
++                        principalTable: "Findings",
++                        principalColumn: "Id",
++                        onDelete: ReferentialAction.Cascade);
++                    table.ForeignKey(
++                        name: "FK_Reviews_Patches_PatchId",
++                        column: x => x.PatchId,
++                        principalTable: "Patches",
++                        principalColumn: "Id",
++                        onDelete: ReferentialAction.Cascade);
++                    table.ForeignKey(
++                        name: "FK_Reviews_Users_UserId",
++                        column: x => x.UserId,
++                        principalTable: "Users",
++                        principalColumn: "Id",
++                        onDelete: ReferentialAction.SetNull);
++                });
++
++            migrationBuilder.CreateIndex(
++                name: "IX_AnalysisRuns_RepositoryId_StartedAt",
++                table: "AnalysisRuns",
++                columns: new[] { "RepositoryId", "StartedAt" });
++
++            migrationBuilder.CreateIndex(
++                name: "IX_Findings_AnalysisRunId",
++                table: "Findings",
++                column: "AnalysisRunId");
++
++            migrationBuilder.CreateIndex(
++                name: "IX_Patches_FindingId",
++                table: "Patches",
++                column: "FindingId");
++
++            migrationBuilder.CreateIndex(
++                name: "IX_Repositories_Owner_Name",
++                table: "Repositories",
++                columns: new[] { "Owner", "Name" },
++                unique: true);
++
++            migrationBuilder.CreateIndex(
++                name: "IX_Repositories_UserId",
++                table: "Repositories",
++                column: "UserId");
++
++            migrationBuilder.CreateIndex(
++                name: "IX_Reviews_AnalysisRunId",
++                table: "Reviews",
++                column: "AnalysisRunId");
++
++            migrationBuilder.CreateIndex(
++                name: "IX_Reviews_FindingId",
++                table: "Reviews",
++                column: "FindingId");
++
++            migrationBuilder.CreateIndex(
++                name: "IX_Reviews_PatchId",
++                table: "Reviews",
++                column: "PatchId");
++
++            migrationBuilder.CreateIndex(
++                name: "IX_Reviews_UserId",
++                table: "Reviews",
++                column: "UserId");
++
++            migrationBuilder.CreateIndex(
++                name: "IX_Users_GitHubLogin",
++                table: "Users",
++                column: "GitHubLogin",
++                unique: true);
++
++            migrationBuilder.CreateIndex(
++                name: "IX_VerificationResults_AnalysisRunId_CheckType",
++                table: "VerificationResults",
++                columns: new[] { "AnalysisRunId", "CheckType" });
++        }
++
++        /// <inheritdoc />
++        protected override void Down(MigrationBuilder migrationBuilder)
++        {
++            migrationBuilder.DropTable(
++                name: "Reviews");
++
++            migrationBuilder.DropTable(
++                name: "VerificationResults");
++
++            migrationBuilder.DropTable(
++                name: "Patches");
++
++            migrationBuilder.DropTable(
++                name: "Findings");
++
++            migrationBuilder.DropTable(
++                name: "AnalysisRuns");
++
++            migrationBuilder.DropTable(
++                name: "Repositories");
++
++            migrationBuilder.DropTable(
++                name: "Users");
++        }
++    }
++}
+diff --git a/Data/Migrations/AppDbContextModelSnapshot.cs b/Data/Migrations/AppDbContextModelSnapshot.cs
+new file mode 100644
+index 0000000..1736965
+--- /dev/null
++++ b/Data/Migrations/AppDbContextModelSnapshot.cs
+@@ -0,0 +1,450 @@
++﻿// <auto-generated />
++using System;
++using CodeRefine.Api.Data;
++using Microsoft.EntityFrameworkCore;
++using Microsoft.EntityFrameworkCore.Infrastructure;
++using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
++using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
++
++#nullable disable
++
++namespace CodeRefine.Api.Data.Migrations
++{
++    [DbContext(typeof(AppDbContext))]
++    partial class AppDbContextModelSnapshot : ModelSnapshot
++    {
++        protected override void BuildModel(ModelBuilder modelBuilder)
++        {
++#pragma warning disable 612, 618
++            modelBuilder
++                .HasAnnotation("ProductVersion", "9.0.1")
++                .HasAnnotation("Relational:MaxIdentifierLength", 63);
++
++            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
++
++            modelBuilder.Entity("CodeRefine.Api.Models.AnalysisRun", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("CommitSha")
++                        .HasColumnType("text");
++
++                    b.Property<DateTime?>("CompletedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("ErrorMessage")
++                        .HasColumnType("text");
++
++                    b.Property<string>("ImprovementBranch")
++                        .HasColumnType("text");
++
++                    b.Property<int?>("ImprovementPrNumber")
++                        .HasColumnType("integer");
++
++                    b.Property<string>("ImprovementPrUrl")
++                        .HasColumnType("text");
++
++                    b.Property<int?>("PullRequestNumber")
++                        .HasColumnType("integer");
++
++                    b.Property<double?>("QualityScoreAfter")
++                        .HasColumnType("double precision");
++
++                    b.Property<double?>("QualityScoreBefore")
++                        .HasColumnType("double precision");
++
++                    b.Property<Guid>("RepositoryId")
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("SourceBranch")
++                        .HasColumnType("text");
++
++                    b.Property<DateTime>("StartedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<int>("Status")
++                        .HasColumnType("integer");
++
++                    b.Property<string>("TargetBranch")
++                        .HasColumnType("text");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("RepositoryId", "StartedAt");
++
++                    b.ToTable("AnalysisRuns");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Finding", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("AgentType")
++                        .IsRequired()
++                        .HasMaxLength(100)
++                        .HasColumnType("character varying(100)");
++
++                    b.Property<Guid>("AnalysisRunId")
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("Category")
++                        .HasColumnType("text");
++
++                    b.Property<double>("Confidence")
++                        .HasColumnType("double precision");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("Description")
++                        .HasColumnType("text");
++
++                    b.Property<int>("EndLine")
++                        .HasColumnType("integer");
++
++                    b.Property<string>("FilePath")
++                        .IsRequired()
++                        .HasMaxLength(1000)
++                        .HasColumnType("character varying(1000)");
++
++                    b.Property<string>("Recommendation")
++                        .HasColumnType("text");
++
++                    b.Property<int>("Severity")
++                        .HasColumnType("integer");
++
++                    b.Property<int>("StartLine")
++                        .HasColumnType("integer");
++
++                    b.Property<int>("Status")
++                        .HasColumnType("integer");
++
++                    b.Property<string>("Title")
++                        .IsRequired()
++                        .HasMaxLength(500)
++                        .HasColumnType("character varying(500)");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("AnalysisRunId");
++
++                    b.ToTable("Findings");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Patch", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("Diff")
++                        .IsRequired()
++                        .HasColumnType("text");
++
++                    b.Property<string>("Explanation")
++                        .HasColumnType("text");
++
++                    b.Property<string>("FilePath")
++                        .IsRequired()
++                        .HasMaxLength(1000)
++                        .HasColumnType("character varying(1000)");
++
++                    b.Property<Guid>("FindingId")
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("OriginalCode")
++                        .IsRequired()
++                        .HasColumnType("text");
++
++                    b.Property<string>("ProposedCode")
++                        .IsRequired()
++                        .HasColumnType("text");
++
++                    b.Property<int>("Status")
++                        .HasColumnType("integer");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("FindingId");
++
++                    b.ToTable("Patches");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Repository", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("DefaultBranch")
++                        .IsRequired()
++                        .HasColumnType("text");
++
++                    b.Property<string>("GitHubRepoId")
++                        .IsRequired()
++                        .HasMaxLength(100)
++                        .HasColumnType("character varying(100)");
++
++                    b.Property<long?>("InstallationId")
++                        .HasColumnType("bigint");
++
++                    b.Property<bool>("IsPrivate")
++                        .HasColumnType("boolean");
++
++                    b.Property<string>("Name")
++                        .IsRequired()
++                        .HasMaxLength(200)
++                        .HasColumnType("character varying(200)");
++
++                    b.Property<string>("Owner")
++                        .IsRequired()
++                        .HasMaxLength(200)
++                        .HasColumnType("character varying(200)");
++
++                    b.Property<Guid?>("UserId")
++                        .HasColumnType("uuid");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("UserId");
++
++                    b.HasIndex("Owner", "Name")
++                        .IsUnique();
++
++                    b.ToTable("Repositories");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Review", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<Guid>("AnalysisRunId")
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("Comment")
++                        .HasColumnType("text");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<int>("Decision")
++                        .HasColumnType("integer");
++
++                    b.Property<Guid?>("FindingId")
++                        .HasColumnType("uuid");
++
++                    b.Property<Guid?>("PatchId")
++                        .HasColumnType("uuid");
++
++                    b.Property<Guid?>("UserId")
++                        .HasColumnType("uuid");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("AnalysisRunId");
++
++                    b.HasIndex("FindingId");
++
++                    b.HasIndex("PatchId");
++
++                    b.HasIndex("UserId");
++
++                    b.ToTable("Reviews");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.User", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<string>("AvatarUrl")
++                        .HasColumnType("text");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<string>("DisplayName")
++                        .HasColumnType("text");
++
++                    b.Property<string>("Email")
++                        .HasColumnType("text");
++
++                    b.Property<string>("GitHubLogin")
++                        .IsRequired()
++                        .HasMaxLength(200)
++                        .HasColumnType("character varying(200)");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("GitHubLogin")
++                        .IsUnique();
++
++                    b.ToTable("Users");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.VerificationResult", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid");
++
++                    b.Property<Guid>("AnalysisRunId")
++                        .HasColumnType("uuid");
++
++                    b.Property<int>("CheckType")
++                        .HasColumnType("integer");
++
++                    b.Property<DateTime>("CreatedAt")
++                        .HasColumnType("timestamp with time zone");
++
++                    b.Property<long>("DurationMs")
++                        .HasColumnType("bigint");
++
++                    b.Property<string>("Output")
++                        .HasColumnType("text");
++
++                    b.Property<int>("Status")
++                        .HasColumnType("integer");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("AnalysisRunId", "CheckType");
++
++                    b.ToTable("VerificationResults");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.AnalysisRun", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.Repository", "Repository")
++                        .WithMany("AnalysisRuns")
++                        .HasForeignKey("RepositoryId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.Navigation("Repository");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Finding", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.AnalysisRun", "AnalysisRun")
++                        .WithMany("Findings")
++                        .HasForeignKey("AnalysisRunId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.Navigation("AnalysisRun");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Patch", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.Finding", "Finding")
++                        .WithMany("Patches")
++                        .HasForeignKey("FindingId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.Navigation("Finding");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Repository", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.User", "User")
++                        .WithMany("Repositories")
++                        .HasForeignKey("UserId")
++                        .OnDelete(DeleteBehavior.SetNull);
++
++                    b.Navigation("User");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Review", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.AnalysisRun", "AnalysisRun")
++                        .WithMany("Reviews")
++                        .HasForeignKey("AnalysisRunId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.HasOne("CodeRefine.Api.Models.Finding", "Finding")
++                        .WithMany("Reviews")
++                        .HasForeignKey("FindingId")
++                        .OnDelete(DeleteBehavior.Cascade);
++
++                    b.HasOne("CodeRefine.Api.Models.Patch", "Patch")
++                        .WithMany("Reviews")
++                        .HasForeignKey("PatchId")
++                        .OnDelete(DeleteBehavior.Cascade);
++
++                    b.HasOne("CodeRefine.Api.Models.User", "User")
++                        .WithMany("Reviews")
++                        .HasForeignKey("UserId")
++                        .OnDelete(DeleteBehavior.SetNull);
++
++                    b.Navigation("AnalysisRun");
++
++                    b.Navigation("Finding");
++
++                    b.Navigation("Patch");
++
++                    b.Navigation("User");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.VerificationResult", b =>
++                {
++                    b.HasOne("CodeRefine.Api.Models.AnalysisRun", "AnalysisRun")
++                        .WithMany("VerificationResults")
++                        .HasForeignKey("AnalysisRunId")
++                        .OnDelete(DeleteBehavior.Cascade)
++                        .IsRequired();
++
++                    b.Navigation("AnalysisRun");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.AnalysisRun", b =>
++                {
++                    b.Navigation("Findings");
++
++                    b.Navigation("Reviews");
++
++                    b.Navigation("VerificationResults");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Finding", b =>
++                {
++                    b.Navigation("Patches");
++
++                    b.Navigation("Reviews");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Patch", b =>
++                {
++                    b.Navigation("Reviews");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.Repository", b =>
++                {
++                    b.Navigation("AnalysisRuns");
++                });
++
++            modelBuilder.Entity("CodeRefine.Api.Models.User", b =>
++                {
++                    b.Navigation("Repositories");
++
++                    b.Navigation("Reviews");
++                });
++#pragma warning restore 612, 618
++        }
++    }
++}
+diff --git a/Enums/AnalysisStatus.cs b/Enums/AnalysisStatus.cs
+new file mode 100644
+index 0000000..18afec6
+--- /dev/null
++++ b/Enums/AnalysisStatus.cs
+@@ -0,0 +1,15 @@
++namespace CodeRefine.Api.Enums;
++
++public enum AnalysisStatus
++{
++    Queued = 0,
++    Analyzing = 1,
++    GeneratingFixes = 2,
++    Verifying = 3,
++    ReadyForReview = 4,
++    Approved = 5,
++    Rejected = 6,
++    CreatingPullRequest = 7,
++    Completed = 8,
++    Failed = 9
++}
+diff --git a/Enums/FindingSeverity.cs b/Enums/FindingSeverity.cs
+new file mode 100644
+index 0000000..dac842b
+--- /dev/null
++++ b/Enums/FindingSeverity.cs
+@@ -0,0 +1,10 @@
++namespace CodeRefine.Api.Enums;
++
++public enum FindingSeverity
++{
++    Info = 0,
++    Low = 1,
++    Medium = 2,
++    High = 3,
++    Critical = 4
++}
+diff --git a/Enums/FindingStatus.cs b/Enums/FindingStatus.cs
+new file mode 100644
+index 0000000..6c48301
+--- /dev/null
++++ b/Enums/FindingStatus.cs
+@@ -0,0 +1,11 @@
++namespace CodeRefine.Api.Enums;
++
++public enum FindingStatus
++{
++    Open = 0,
++    PatchProposed = 1,
++    Verified = 2,
++    Accepted = 3,
++    Rejected = 4,
++    Dismissed = 5
++}
+diff --git a/Enums/PatchStatus.cs b/Enums/PatchStatus.cs
+new file mode 100644
+index 0000000..dbb25df
+--- /dev/null
++++ b/Enums/PatchStatus.cs
+@@ -0,0 +1,11 @@
++namespace CodeRefine.Api.Enums;
++
++public enum PatchStatus
++{
++    Proposed = 0,
++    Verified = 1,
++    VerificationFailed = 2,
++    Approved = 3,
++    Rejected = 4,
++    Applied = 5
++}
+diff --git a/Enums/ReviewDecision.cs b/Enums/ReviewDecision.cs
+new file mode 100644
+index 0000000..cf724d9
+--- /dev/null
++++ b/Enums/ReviewDecision.cs
+@@ -0,0 +1,9 @@
++namespace CodeRefine.Api.Enums;
++
++public enum ReviewDecision
++{
++    Pending = 0,
++    Approved = 1,
++    Rejected = 2,
++    ChangesRequested = 3
++}
+diff --git a/Enums/VerificationCheckType.cs b/Enums/VerificationCheckType.cs
+new file mode 100644
+index 0000000..80c707e
+--- /dev/null
++++ b/Enums/VerificationCheckType.cs
+@@ -0,0 +1,15 @@
++namespace CodeRefine.Api.Enums;
++
++/// <summary>
++/// Verification checks executed by the sandbox. Owned as a contract with
++/// Developer 3; values are mapped from the sandbox response.
++/// </summary>
++public enum VerificationCheckType
++{
++    Syntax = 0,
++    Lint = 1,
++    TypeCheck = 2,
++    Tests = 3,
++    Build = 4,
++    Security = 5
++}
+diff --git a/Enums/VerificationStatus.cs b/Enums/VerificationStatus.cs
+new file mode 100644
+index 0000000..894d373
+--- /dev/null
++++ b/Enums/VerificationStatus.cs
+@@ -0,0 +1,11 @@
++namespace CodeRefine.Api.Enums;
++
++public enum VerificationStatus
++{
++    Pending = 0,
++    Running = 1,
++    Passed = 2,
++    Failed = 3,
++    Skipped = 4,
++    Error = 5
++}
+diff --git a/Exceptions/CodeRefineException.cs b/Exceptions/CodeRefineException.cs
+new file mode 100644
+index 0000000..5c56ee4
+--- /dev/null
++++ b/Exceptions/CodeRefineException.cs
+@@ -0,0 +1,91 @@
++namespace CodeRefine.Api.Exceptions;
++
++/// <summary>
++/// Base class for exceptions that map to a well-defined HTTP status code and a
++/// client-safe message. Messages on these exceptions are returned to callers,
++/// so they must never contain secrets or internal details.
++/// </summary>
++public abstract class CodeRefineException : Exception
++{
++    protected CodeRefineException(string message, Exception? innerException = null)
++        : base(message, innerException)
++    {
++    }
++
++    public abstract int StatusCode { get; }
++
++    public abstract string Title { get; }
++}
++
++public class NotFoundException : CodeRefineException
++{
++    public NotFoundException(string message) : base(message)
++    {
++    }
++
++    public override int StatusCode => StatusCodes.Status404NotFound;
++
++    public override string Title => "Resource not found";
++}
++
++public class ValidationException : CodeRefineException
++{
++    public ValidationException(string message) : base(message)
++    {
++    }
++
++    public override int StatusCode => StatusCodes.Status400BadRequest;
++
++    public override string Title => "Invalid request";
++}
++
++/// <summary>
++/// Thrown when an operation is not allowed in the current analysis state, for
++/// example creating an improvement pull request before human approval.
++/// </summary>
++public class InvalidStateException : CodeRefineException
++{
++    public InvalidStateException(string message) : base(message)
++    {
++    }
++
++    public override int StatusCode => StatusCodes.Status409Conflict;
++
++    public override string Title => "Operation not allowed in current state";
++}
++
++public class GitHubApiException : CodeRefineException
++{
++    public GitHubApiException(string message, Exception? innerException = null)
++        : base(message, innerException)
++    {
++    }
++
++    public override int StatusCode => StatusCodes.Status502BadGateway;
++
++    public override string Title => "GitHub request failed";
++}
++
++public class AiServiceException : CodeRefineException
++{
++    public AiServiceException(string message, Exception? innerException = null)
++        : base(message, innerException)
++    {
++    }
++
++    public override int StatusCode => StatusCodes.Status502BadGateway;
++
++    public override string Title => "Analysis service request failed";
++}
++
++public class GitOperationException : CodeRefineException
++{
++    public GitOperationException(string message, Exception? innerException = null)
++        : base(message, innerException)
++    {
++    }
++
++    public override int StatusCode => StatusCodes.Status500InternalServerError;
++
++    public override string Title => "Git operation failed";
++}
+diff --git a/Middleware/ExceptionHandlingMiddleware.cs b/Middleware/ExceptionHandlingMiddleware.cs
+new file mode 100644
+index 0000000..c38fc5f
+--- /dev/null
++++ b/Middleware/ExceptionHandlingMiddleware.cs
+@@ -0,0 +1,77 @@
++using System.Diagnostics;
++using CodeRefine.Api.Exceptions;
++using Microsoft.AspNetCore.Mvc;
++
++namespace CodeRefine.Api.Middleware;
++
++/// <summary>
++/// Converts unhandled exceptions into consistent ProblemDetails responses.
++/// Stack traces and inner exception details are logged but never returned to
++/// the caller, so tokens and credentials cannot leak through the API.
++/// </summary>
++public class ExceptionHandlingMiddleware
++{
++    private readonly RequestDelegate _next;
++    private readonly ILogger<ExceptionHandlingMiddleware> _logger;
++
++    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
++    {
++        _next = next;
++        _logger = logger;
++    }
++
++    public async Task InvokeAsync(HttpContext context)
++    {
++        try
++        {
++            await _next(context);
++        }
++        catch (CodeRefineException ex)
++        {
++            _logger.LogWarning(ex, "Handled {ExceptionType} on {Method} {Path}",
++                ex.GetType().Name, context.Request.Method, context.Request.Path);
++
++            await WriteProblemAsync(context, ex.StatusCode, ex.Title, ex.Message);
++        }
++        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
++        {
++            _logger.LogInformation("Request {Method} {Path} was cancelled by the client",
++                context.Request.Method, context.Request.Path);
++        }
++        catch (Exception ex)
++        {
++            _logger.LogError(ex, "Unhandled exception on {Method} {Path}",
++                context.Request.Method, context.Request.Path);
++
++            await WriteProblemAsync(
++                context,
++                StatusCodes.Status500InternalServerError,
++                "Unexpected error",
++                "An unexpected error occurred while processing the request.");
++        }
++    }
++
++    private static async Task WriteProblemAsync(HttpContext context, int statusCode, string title, string detail)
++    {
++        if (context.Response.HasStarted)
++        {
++            return;
++        }
++
++        var problem = new ProblemDetails
++        {
++            Status = statusCode,
++            Title = title,
++            Detail = detail,
++            Instance = context.Request.Path
++        };
++
++        problem.Extensions["traceId"] = Activity.Current?.Id ?? context.TraceIdentifier;
++
++        context.Response.Clear();
++        context.Response.StatusCode = statusCode;
++        context.Response.ContentType = "application/problem+json";
++
++        await context.Response.WriteAsJsonAsync(problem);
++    }
++}
+diff --git a/Models/AnalysisRun.cs b/Models/AnalysisRun.cs
+new file mode 100644
+index 0000000..8d3c4be
+--- /dev/null
++++ b/Models/AnalysisRun.cs
+@@ -0,0 +1,36 @@
++using CodeRefine.Api.Enums;
++
++namespace CodeRefine.Api.Models;
++
++public class AnalysisRun
++{
++    public Guid Id { get; set; } = Guid.NewGuid();
++    public Guid RepositoryId { get; set; }
++    public Repository? Repository { get; set; }
++
++    public int? PullRequestNumber { get; set; }
++    public string? SourceBranch { get; set; }
++    public string? TargetBranch { get; set; }
++    public string? CommitSha { get; set; }
++
++    public AnalysisStatus Status { get; set; } = AnalysisStatus.Queued;
++    public string? ErrorMessage { get; set; }
++
++    public double? QualityScoreBefore { get; set; }
++    public double? QualityScoreAfter { get; set; }
++
++    /// <summary>Branch created by the backend when delivering approved improvements.</summary>
++    public string? ImprovementBranch { get; set; }
++
++    /// <summary>Number of the improvement pull request opened on GitHub, when created.</summary>
++    public int? ImprovementPrNumber { get; set; }
++
++    public string? ImprovementPrUrl { get; set; }
++
++    public DateTime StartedAt { get; set; } = DateTime.UtcNow;
++    public DateTime? CompletedAt { get; set; }
++
++    public ICollection<Finding> Findings { get; set; } = new List<Finding>();
++    public ICollection<VerificationResult> VerificationResults { get; set; } = new List<VerificationResult>();
++    public ICollection<Review> Reviews { get; set; } = new List<Review>();
++}
+diff --git a/Models/Finding.cs b/Models/Finding.cs
+new file mode 100644
+index 0000000..aeec420
+--- /dev/null
++++ b/Models/Finding.cs
+@@ -0,0 +1,33 @@
++using CodeRefine.Api.Enums;
++
++namespace CodeRefine.Api.Models;
++
++public class Finding
++{
++    public Guid Id { get; set; } = Guid.NewGuid();
++    public Guid AnalysisRunId { get; set; }
++    public AnalysisRun? AnalysisRun { get; set; }
++
++    /// <summary>Agent that produced the finding, e.g. redundancy, efficiency, dead_code, security.</summary>
++    public string AgentType { get; set; } = string.Empty;
++
++    public string FilePath { get; set; } = string.Empty;
++    public int StartLine { get; set; }
++    public int EndLine { get; set; }
++
++    public string? Category { get; set; }
++    public FindingSeverity Severity { get; set; } = FindingSeverity.Info;
++
++    public string Title { get; set; } = string.Empty;
++    public string? Description { get; set; }
++    public string? Recommendation { get; set; }
++
++    /// <summary>Agent confidence between 0 and 1.</summary>
++    public double Confidence { get; set; }
++
++    public FindingStatus Status { get; set; } = FindingStatus.Open;
++    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
++
++    public ICollection<Patch> Patches { get; set; } = new List<Patch>();
++    public ICollection<Review> Reviews { get; set; } = new List<Review>();
++}
+diff --git a/Models/Patch.cs b/Models/Patch.cs
+new file mode 100644
+index 0000000..32e5b3c
+--- /dev/null
++++ b/Models/Patch.cs
+@@ -0,0 +1,23 @@
++using CodeRefine.Api.Enums;
++
++namespace CodeRefine.Api.Models;
++
++public class Patch
++{
++    public Guid Id { get; set; } = Guid.NewGuid();
++    public Guid FindingId { get; set; }
++    public Finding? Finding { get; set; }
++
++    public string FilePath { get; set; } = string.Empty;
++    public string OriginalCode { get; set; } = string.Empty;
++    public string ProposedCode { get; set; } = string.Empty;
++
++    /// <summary>Unified diff produced by the AI service.</summary>
++    public string Diff { get; set; } = string.Empty;
++
++    public string? Explanation { get; set; }
++    public PatchStatus Status { get; set; } = PatchStatus.Proposed;
++    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
++
++    public ICollection<Review> Reviews { get; set; } = new List<Review>();
++}
+diff --git a/Models/Repository.cs b/Models/Repository.cs
+new file mode 100644
+index 0000000..df28781
+--- /dev/null
++++ b/Models/Repository.cs
+@@ -0,0 +1,26 @@
++namespace CodeRefine.Api.Models;
++
++public class Repository
++{
++    public Guid Id { get; set; } = Guid.NewGuid();
++
++    public Guid? UserId { get; set; }
++    public User? User { get; set; }
++
++    /// <summary>External GitHub repository identifier. Used only when calling the GitHub API.</summary>
++    public string GitHubRepoId { get; set; } = string.Empty;
++
++    public string Owner { get; set; } = string.Empty;
++    public string Name { get; set; } = string.Empty;
++    public string DefaultBranch { get; set; } = "main";
++
++    /// <summary>GitHub App installation that grants this backend access to the repository.</summary>
++    public long? InstallationId { get; set; }
++
++    public bool IsPrivate { get; set; }
++    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
++
++    public string FullName => $"{Owner}/{Name}";
++
++    public ICollection<AnalysisRun> AnalysisRuns { get; set; } = new List<AnalysisRun>();
++}
+diff --git a/Models/Review.cs b/Models/Review.cs
+new file mode 100644
+index 0000000..f7e164c
+--- /dev/null
++++ b/Models/Review.cs
+@@ -0,0 +1,26 @@
++using CodeRefine.Api.Enums;
++
++namespace CodeRefine.Api.Models;
++
++public class Review
++{
++    public Guid Id { get; set; } = Guid.NewGuid();
++
++    public Guid AnalysisRunId { get; set; }
++    public AnalysisRun? AnalysisRun { get; set; }
++
++    /// <summary>Set when the decision targets a single finding rather than the whole run.</summary>
++    public Guid? FindingId { get; set; }
++    public Finding? Finding { get; set; }
++
++    /// <summary>Set when the decision targets a specific proposed patch.</summary>
++    public Guid? PatchId { get; set; }
++    public Patch? Patch { get; set; }
++
++    public Guid? UserId { get; set; }
++    public User? User { get; set; }
++
++    public ReviewDecision Decision { get; set; } = ReviewDecision.Pending;
++    public string? Comment { get; set; }
++    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
++}
+diff --git a/Models/User.cs b/Models/User.cs
+new file mode 100644
+index 0000000..d2c9042
+--- /dev/null
++++ b/Models/User.cs
+@@ -0,0 +1,13 @@
++namespace CodeRefine.Api.Models;
++
++public class User
++{
++    public Guid Id { get; set; } = Guid.NewGuid();
++    public string GitHubLogin { get; set; } = string.Empty;
++    public string? DisplayName { get; set; }
++    public string? Email { get; set; }
++    public string? AvatarUrl { get; set; }
++    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
++
++    public ICollection<Repository> Repositories { get; set; } = new List<Repository>();
++    public ICollection<Review> Reviews { get; set; } = new List<Review>();}
+diff --git a/Models/VerificationResult.cs b/Models/VerificationResult.cs
+new file mode 100644
+index 0000000..4ebfe96
+--- /dev/null
++++ b/Models/VerificationResult.cs
+@@ -0,0 +1,23 @@
++using CodeRefine.Api.Enums;
++
++namespace CodeRefine.Api.Models;
++
++/// <summary>
++/// One sandbox check executed for an analysis run. A run has many results,
++/// one per check type.
++/// </summary>
++public class VerificationResult
++{
++    public Guid Id { get; set; } = Guid.NewGuid();
++    public Guid AnalysisRunId { get; set; }
++    public AnalysisRun? AnalysisRun { get; set; }
++
++    public VerificationCheckType CheckType { get; set; }
++    public VerificationStatus Status { get; set; } = VerificationStatus.Pending;
++
++    /// <summary>Sandbox output. Truncated by the sandbox; never contains credentials.</summary>
++    public string? Output { get; set; }
++
++    public long DurationMs { get; set; }
++    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
++}
+diff --git a/Program.cs b/Program.cs
+new file mode 100644
+index 0000000..6457316
+--- /dev/null
++++ b/Program.cs
+@@ -0,0 +1,86 @@
++using CodeRefine.Api.Configuration;
++using CodeRefine.Api.Data;
++using CodeRefine.Api.Middleware;
++using CodeRefine.Api.Services.AI;
++using CodeRefine.Api.Services.Analysis;
++using CodeRefine.Api.Services.Git;
++using CodeRefine.Api.Services.GitHub;
++using Microsoft.EntityFrameworkCore;
++using Microsoft.Extensions.Options;
++
++var builder = WebApplication.CreateBuilder(args);
++
++builder.Services.Configure<GitHubSettings>(builder.Configuration.GetSection(GitHubSettings.SectionName));
++builder.Services.Configure<AiServiceSettings>(builder.Configuration.GetSection(AiServiceSettings.SectionName));
++
++builder.Services.AddDbContext<AppDbContext>(options =>
++    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
++
++// Named client plus a singleton provider so the installation token cache is
++// shared across requests instead of being rebuilt per scope.
++builder.Services.AddHttpClient(GitHubAppTokenProvider.HttpClientName, (provider, client) =>
++{
++    var settings = provider.GetRequiredService<IOptions<GitHubSettings>>().Value;
++    client.BaseAddress = new Uri(settings.ApiBaseUrl);
++    client.DefaultRequestHeaders.UserAgent.ParseAdd(settings.UserAgent);
++    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
++});
++
++builder.Services.AddSingleton<IGitHubAppTokenProvider>(provider => new GitHubAppTokenProvider(
++    provider.GetRequiredService<IHttpClientFactory>(),
++    provider.GetRequiredService<IOptions<GitHubSettings>>(),
++    provider.GetRequiredService<ILogger<GitHubAppTokenProvider>>()));
++
++builder.Services.AddScoped<IGitHubService, GitHubService>();
++
++builder.Services.AddHttpClient<IAiService, AiService>((provider, client) =>
++{
++    var settings = provider.GetRequiredService<IOptions<AiServiceSettings>>().Value;
++
++    if (!string.IsNullOrWhiteSpace(settings.BaseUrl))
++    {
++        client.BaseAddress = new Uri(settings.BaseUrl);
++    }
++
++    client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
++});
++
++builder.Services.AddScoped<IGitService, GitService>();
++builder.Services.AddScoped<IAnalysisService, AnalysisService>();
++
++builder.Services.AddCors(options =>
++    options.AddDefaultPolicy(policy => policy
++        .AllowAnyOrigin()
++        .AllowAnyHeader()
++        .AllowAnyMethod()));
++
++builder.Services.AddControllers();
++builder.Services.AddProblemDetails();
++builder.Services.AddEndpointsApiExplorer();
++builder.Services.AddSwaggerGen(options =>
++    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
++    {
++        Title = "CodeRefine API",
++        Version = "v1",
++        Description = "AI code quality gate: analysis orchestration, human review and GitHub delivery."
++    }));
++
++var app = builder.Build();
++
++app.UseMiddleware<ExceptionHandlingMiddleware>();
++
++if (app.Environment.IsDevelopment())
++{
++    app.UseSwagger();
++    app.UseSwaggerUI(options =>
++    {
++        options.SwaggerEndpoint("/swagger/v1/swagger.json", "CodeRefine API v1");
++        options.RoutePrefix = "swagger";
++    });
++}
++
++app.UseHttpsRedirection();
++app.UseCors();
++app.MapControllers();
++
++app.Run();
+diff --git a/Properties/launchSettings.json b/Properties/launchSettings.json
+new file mode 100644
+index 0000000..8061910
+--- /dev/null
++++ b/Properties/launchSettings.json
+@@ -0,0 +1,25 @@
++﻿{
++  "$schema": "https://json.schemastore.org/launchsettings.json",
++  "profiles": {
++    "http": {
++      "commandName": "Project",
++      "dotnetRunMessages": true,
++      "launchBrowser": true,
++      "launchUrl": "swagger",
++      "applicationUrl": "http://localhost:5019",
++      "environmentVariables": {
++        "ASPNETCORE_ENVIRONMENT": "Development"
++      }
++    },
++    "https": {
++      "commandName": "Project",
++      "dotnetRunMessages": true,
++      "launchBrowser": true,
++      "launchUrl": "swagger",
++      "applicationUrl": "https://localhost:7192;http://localhost:5019",
++      "environmentVariables": {
++        "ASPNETCORE_ENVIRONMENT": "Development"
++      }
++    }
++  }
++}
+diff --git a/Services/AI/AiService.cs b/Services/AI/AiService.cs
+new file mode 100644
+index 0000000..45a4cc3
+--- /dev/null
++++ b/Services/AI/AiService.cs
+@@ -0,0 +1,61 @@
++using System.Net.Http.Json;
++using System.Text.Json;
++using CodeRefine.Api.DTOs.AiService;
++using CodeRefine.Api.Exceptions;
++
++namespace CodeRefine.Api.Services.AI;
++
++public class AiService : IAiService
++{
++    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
++
++    private readonly HttpClient _httpClient;
++    private readonly ILogger<AiService> _logger;
++
++    public AiService(HttpClient httpClient, ILogger<AiService> logger)
++    {
++        _httpClient = httpClient;
++        _logger = logger;
++    }
++
++    public async Task<AnalyzeResponse> AnalyzeAsync(AnalyzeRequest request, CancellationToken cancellationToken = default)
++    {
++        _logger.LogInformation("AI analyze request started for analysis {AnalysisId} with {FileCount} changed files",
++            request.AnalysisId, request.ChangedFiles.Count);
++
++        try
++        {
++            using var response = await _httpClient.PostAsJsonAsync("/analyze", request, SerializerOptions, cancellationToken);
++
++            if (!response.IsSuccessStatusCode)
++            {
++                _logger.LogError("AI analyze request failed for analysis {AnalysisId} with status {StatusCode}",
++                    request.AnalysisId, (int)response.StatusCode);
++
++                throw new AiServiceException($"Analysis service returned status {(int)response.StatusCode}.");
++            }
++
++            var result = await response.Content.ReadFromJsonAsync<AnalyzeResponse>(SerializerOptions, cancellationToken);
++
++            if (result is null)
++            {
++                throw new AiServiceException("Analysis service returned an empty response.");
++            }
++
++            _logger.LogInformation("AI analyze request completed for analysis {AnalysisId} with {FindingCount} findings",
++                request.AnalysisId, result.Findings.Count);
++
++            return result;
++        }
++        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
++        {
++            _logger.LogError(ex, "AI analyze request timed out for analysis {AnalysisId}", request.AnalysisId);
++            throw new AiServiceException("Analysis service timed out.", ex);
++        }
++        catch (HttpRequestException ex)
++        {
++            _logger.LogError(ex, "AI analyze request could not reach the analysis service for analysis {AnalysisId}", request.AnalysisId);
++            throw new AiServiceException("Analysis service is unavailable.", ex);
++        }
++    }
++}
+diff --git a/Services/AI/IAiService.cs b/Services/AI/IAiService.cs
+new file mode 100644
+index 0000000..9975df2
+--- /dev/null
++++ b/Services/AI/IAiService.cs
+@@ -0,0 +1,12 @@
++using CodeRefine.Api.DTOs.AiService;
++
++namespace CodeRefine.Api.Services.AI;
++
++/// <summary>
++/// Thin HTTP client for the Python FastAPI/LangGraph service. This backend
++/// orchestrates the workflow; it does not implement AI logic.
++/// </summary>
++public interface IAiService
++{
++    Task<AnalyzeResponse> AnalyzeAsync(AnalyzeRequest request, CancellationToken cancellationToken = default);
++}
+diff --git a/Services/Analysis/AnalysisService.cs b/Services/Analysis/AnalysisService.cs
+new file mode 100644
+index 0000000..c6c9e77
+--- /dev/null
++++ b/Services/Analysis/AnalysisService.cs
+@@ -0,0 +1,305 @@
++using CodeRefine.Api.Data;
++using CodeRefine.Api.DTOs.Analysis;
++using CodeRefine.Api.DTOs.GitHub;
++using CodeRefine.Api.DTOs.Review;
++using CodeRefine.Api.Enums;
++using CodeRefine.Api.Exceptions;
++using CodeRefine.Api.Models;
++using CodeRefine.Api.Services.GitHub;
++using Microsoft.EntityFrameworkCore;
++
++namespace CodeRefine.Api.Services.Analysis;
++
++public class AnalysisService : IAnalysisService
++{
++    private readonly AppDbContext _dbContext;
++    private readonly IGitHubService _gitHubService;
++    private readonly ILogger<AnalysisService> _logger;
++
++    public AnalysisService(
++        AppDbContext dbContext,
++        IGitHubService gitHubService,
++        ILogger<AnalysisService> logger)
++    {
++        _dbContext = dbContext;
++        _gitHubService = gitHubService;
++        _logger = logger;
++    }
++
++    public async Task<AnalysisResponse> StartAnalysisAsync(StartAnalysisRequest request, CancellationToken cancellationToken = default)
++    {
++        if (request.PullRequestNumber is null && string.IsNullOrWhiteSpace(request.Branch))
++        {
++            throw new ValidationException("Either a pull request number or a branch must be supplied.");
++        }
++
++        var repository = await _dbContext.Repositories
++            .FirstOrDefaultAsync(r => r.Id == request.RepositoryId, cancellationToken)
++            ?? throw new NotFoundException($"Repository '{request.RepositoryId}' was not found.");
++
++        var run = new AnalysisRun
++        {
++            RepositoryId = repository.Id,
++            PullRequestNumber = request.PullRequestNumber,
++            SourceBranch = request.Branch,
++            TargetBranch = repository.DefaultBranch,
++            Status = AnalysisStatus.Queued
++        };
++
++        if (request.PullRequestNumber is int prNumber)
++        {
++            var pullRequest = await _gitHubService.GetPullRequestAsync(repository.Id, prNumber, cancellationToken);
++            run.SourceBranch = pullRequest.HeadBranch;
++            run.TargetBranch = pullRequest.BaseBranch;
++            run.CommitSha = pullRequest.HeadSha;
++        }
++
++        _dbContext.AnalysisRuns.Add(run);
++        await _dbContext.SaveChangesAsync(cancellationToken);
++
++        _logger.LogInformation(
++            "Analysis {AnalysisId} started for repository {RepositoryId} (PR {PullRequestNumber}, branch {SourceBranch})",
++            run.Id, repository.Id, run.PullRequestNumber, run.SourceBranch);
++
++        return MapToResponse(run, repository);
++    }
++
++    public async Task<AnalysisResponse> GetAnalysisAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
++    {
++        var run = await _dbContext.AnalysisRuns
++            .Include(r => r.Repository)
++            .Include(r => r.Findings).ThenInclude(f => f.Patches)
++            .AsNoTracking()
++            .FirstOrDefaultAsync(r => r.Id == analysisRunId, cancellationToken)
++            ?? throw new NotFoundException($"Analysis '{analysisRunId}' was not found.");
++
++        return MapToResponse(run, run.Repository, includeFindings: true);
++    }
++
++    public async Task<IReadOnlyList<FindingDto>> GetFindingsAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
++    {
++        await EnsureAnalysisExistsAsync(analysisRunId, cancellationToken);
++
++        var findings = await _dbContext.Findings
++            .Include(f => f.Patches)
++            .Where(f => f.AnalysisRunId == analysisRunId)
++            .OrderByDescending(f => f.Severity)
++            .AsNoTracking()
++            .ToListAsync(cancellationToken);
++
++        return findings.Select(MapToDto).ToList();
++    }
++
++    public async Task<IReadOnlyList<PatchDto>> GetPatchesAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
++    {
++        await EnsureAnalysisExistsAsync(analysisRunId, cancellationToken);
++
++        var patches = await _dbContext.Patches
++            .Where(p => p.Finding!.AnalysisRunId == analysisRunId)
++            .OrderBy(p => p.CreatedAt)
++            .AsNoTracking()
++            .ToListAsync(cancellationToken);
++
++        return patches.Select(MapToDto).ToList();
++    }
++
++    public async Task<IReadOnlyList<VerificationDto>> GetVerificationAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
++    {
++        await EnsureAnalysisExistsAsync(analysisRunId, cancellationToken);
++
++        var results = await _dbContext.VerificationResults
++            .Where(v => v.AnalysisRunId == analysisRunId)
++            .OrderBy(v => v.CheckType)
++            .AsNoTracking()
++            .ToListAsync(cancellationToken);
++
++        return results.Select(MapToDto).ToList();
++    }
++
++    public Task<AnalysisResponse> ApproveAsync(Guid analysisRunId, ReviewRequest request, CancellationToken cancellationToken = default)
++        => RecordDecisionAsync(analysisRunId, request, ReviewDecision.Approved, cancellationToken);
++
++    public Task<AnalysisResponse> RejectAsync(Guid analysisRunId, ReviewRequest request, CancellationToken cancellationToken = default)
++        => RecordDecisionAsync(analysisRunId, request, ReviewDecision.Rejected, cancellationToken);
++
++    public Task<PullRequestDto> CreateImprovementPullRequestAsync(Guid analysisRunId, ImprovementPrRequest request, CancellationToken cancellationToken = default)
++    {
++        // Delivery is implemented in Step 6, once Developer 3 confirms how the
++        // verified file contents are exposed to this backend.
++        throw new NotImplementedException("Improvement pull request delivery is implemented in Step 6.");
++    }
++
++    private async Task<AnalysisResponse> RecordDecisionAsync(
++        Guid analysisRunId,
++        ReviewRequest request,
++        ReviewDecision decision,
++        CancellationToken cancellationToken)
++    {
++        var run = await _dbContext.AnalysisRuns
++            .Include(r => r.Repository)
++            .FirstOrDefaultAsync(r => r.Id == analysisRunId, cancellationToken)
++            ?? throw new NotFoundException($"Analysis '{analysisRunId}' was not found.");
++
++        if (run.Status != AnalysisStatus.ReadyForReview)
++        {
++            throw new InvalidStateException($"Analysis is '{run.Status}' and cannot be reviewed. Expected 'ReadyForReview'.");
++        }
++
++        await ValidateReviewTargetsAsync(analysisRunId, request, cancellationToken);
++
++        var reviews = BuildReviews(analysisRunId, request, decision);
++        _dbContext.Reviews.AddRange(reviews);
++
++        run.Status = decision == ReviewDecision.Approved ? AnalysisStatus.Approved : AnalysisStatus.Rejected;
++
++        if (decision == ReviewDecision.Rejected)
++        {
++            run.CompletedAt = DateTime.UtcNow;
++        }
++
++        await _dbContext.SaveChangesAsync(cancellationToken);
++
++        _logger.LogInformation("Human {Decision} recorded for analysis {AnalysisId} ({ReviewCount} review records)",
++            decision, analysisRunId, reviews.Count);
++
++        return MapToResponse(run, run.Repository);
++    }
++
++    private async Task ValidateReviewTargetsAsync(Guid analysisRunId, ReviewRequest request, CancellationToken cancellationToken)
++    {
++        if (request.FindingIds.Count > 0)
++        {
++            var validFindings = await _dbContext.Findings
++                .CountAsync(f => f.AnalysisRunId == analysisRunId && request.FindingIds.Contains(f.Id), cancellationToken);
++
++            if (validFindings != request.FindingIds.Count)
++            {
++                throw new ValidationException("One or more findings do not belong to this analysis.");
++            }
++        }
++
++        if (request.PatchIds.Count > 0)
++        {
++            var validPatches = await _dbContext.Patches
++                .CountAsync(p => p.Finding!.AnalysisRunId == analysisRunId && request.PatchIds.Contains(p.Id), cancellationToken);
++
++            if (validPatches != request.PatchIds.Count)
++            {
++                throw new ValidationException("One or more patches do not belong to this analysis.");
++            }
++        }
++    }
++
++    private static List<Review> BuildReviews(Guid analysisRunId, ReviewRequest request, ReviewDecision decision)
++    {
++        var reviews = new List<Review>();
++
++        foreach (var patchId in request.PatchIds)
++        {
++            reviews.Add(new Review
++            {
++                AnalysisRunId = analysisRunId,
++                PatchId = patchId,
++                Decision = decision,
++                Comment = request.Comment
++            });
++        }
++
++        foreach (var findingId in request.FindingIds)
++        {
++            reviews.Add(new Review
++            {
++                AnalysisRunId = analysisRunId,
++                FindingId = findingId,
++                Decision = decision,
++                Comment = request.Comment
++            });
++        }
++
++        if (reviews.Count == 0)
++        {
++            reviews.Add(new Review
++            {
++                AnalysisRunId = analysisRunId,
++                Decision = decision,
++                Comment = request.Comment
++            });
++        }
++
++        return reviews;
++    }
++
++    private async Task EnsureAnalysisExistsAsync(Guid analysisRunId, CancellationToken cancellationToken)
++    {
++        var exists = await _dbContext.AnalysisRuns.AnyAsync(r => r.Id == analysisRunId, cancellationToken);
++
++        if (!exists)
++        {
++            throw new NotFoundException($"Analysis '{analysisRunId}' was not found.");
++        }
++    }
++
++    private static AnalysisResponse MapToResponse(AnalysisRun run, Models.Repository? repository, bool includeFindings = false) => new()
++    {
++        Id = run.Id,
++        RepositoryId = run.RepositoryId,
++        RepositoryFullName = repository?.FullName ?? string.Empty,
++        PullRequestNumber = run.PullRequestNumber,
++        SourceBranch = run.SourceBranch,
++        TargetBranch = run.TargetBranch,
++        CommitSha = run.CommitSha,
++        Status = run.Status,
++        ErrorMessage = run.ErrorMessage,
++        QualityScoreBefore = run.QualityScoreBefore,
++        QualityScoreAfter = run.QualityScoreAfter,
++        ImprovementBranch = run.ImprovementBranch,
++        ImprovementPrNumber = run.ImprovementPrNumber,
++        ImprovementPrUrl = run.ImprovementPrUrl,
++        StartedAt = run.StartedAt,
++        CompletedAt = run.CompletedAt,
++        FindingCount = run.Findings.Count,
++        Findings = includeFindings ? run.Findings.Select(MapToDto).ToList() : new List<FindingDto>()
++    };
++
++    private static FindingDto MapToDto(Finding finding) => new()
++    {
++        Id = finding.Id,
++        AgentType = finding.AgentType,
++        FilePath = finding.FilePath,
++        StartLine = finding.StartLine,
++        EndLine = finding.EndLine,
++        Category = finding.Category,
++        Severity = finding.Severity,
++        Title = finding.Title,
++        Description = finding.Description,
++        Recommendation = finding.Recommendation,
++        Confidence = finding.Confidence,
++        Status = finding.Status,
++        CreatedAt = finding.CreatedAt,
++        Patches = finding.Patches.Select(MapToDto).ToList()
++    };
++
++    private static PatchDto MapToDto(Patch patch) => new()
++    {
++        Id = patch.Id,
++        FindingId = patch.FindingId,
++        FilePath = patch.FilePath,
++        OriginalCode = patch.OriginalCode,
++        ProposedCode = patch.ProposedCode,
++        Diff = patch.Diff,
++        Explanation = patch.Explanation,
++        Status = patch.Status,
++        CreatedAt = patch.CreatedAt
++    };
++
++    private static VerificationDto MapToDto(VerificationResult result) => new()
++    {
++        Id = result.Id,
++        AnalysisRunId = result.AnalysisRunId,
++        CheckType = result.CheckType,
++        Status = result.Status,
++        Output = result.Output,
++        DurationMs = result.DurationMs,
++        CreatedAt = result.CreatedAt
++    };
++}
+diff --git a/Services/Analysis/IAnalysisService.cs b/Services/Analysis/IAnalysisService.cs
+new file mode 100644
+index 0000000..a900c87
+--- /dev/null
++++ b/Services/Analysis/IAnalysisService.cs
+@@ -0,0 +1,28 @@
++using CodeRefine.Api.DTOs.Analysis;
++using CodeRefine.Api.DTOs.GitHub;
++using CodeRefine.Api.DTOs.Review;
++
++namespace CodeRefine.Api.Services.Analysis;
++
++public interface IAnalysisService
++{
++    Task<AnalysisResponse> StartAnalysisAsync(StartAnalysisRequest request, CancellationToken cancellationToken = default);
++
++    Task<AnalysisResponse> GetAnalysisAsync(Guid analysisRunId, CancellationToken cancellationToken = default);
++
++    Task<IReadOnlyList<FindingDto>> GetFindingsAsync(Guid analysisRunId, CancellationToken cancellationToken = default);
++
++    Task<IReadOnlyList<PatchDto>> GetPatchesAsync(Guid analysisRunId, CancellationToken cancellationToken = default);
++
++    Task<IReadOnlyList<VerificationDto>> GetVerificationAsync(Guid analysisRunId, CancellationToken cancellationToken = default);
++
++    Task<AnalysisResponse> ApproveAsync(Guid analysisRunId, ReviewRequest request, CancellationToken cancellationToken = default);
++
++    Task<AnalysisResponse> RejectAsync(Guid analysisRunId, ReviewRequest request, CancellationToken cancellationToken = default);
++
++    /// <summary>
++    /// Delivers approved and verified patches to GitHub. Enforces the approval
++    /// gate before any write operation.
++    /// </summary>
++    Task<PullRequestDto> CreateImprovementPullRequestAsync(Guid analysisRunId, ImprovementPrRequest request, CancellationToken cancellationToken = default);
++}
+diff --git a/Services/Git/GitService.cs b/Services/Git/GitService.cs
+new file mode 100644
+index 0000000..b5588f5
+--- /dev/null
++++ b/Services/Git/GitService.cs
+@@ -0,0 +1,110 @@
++using System.Diagnostics;
++
++namespace CodeRefine.Api.Services.Git;
++
++public class GitService : IGitService
++{
++    private readonly ILogger<GitService> _logger;
++
++    public GitService(ILogger<GitService> logger)
++    {
++        _logger = logger;
++    }
++
++    public async Task<string> CloneAsync(string cloneUrl, string? branch = null, CancellationToken cancellationToken = default)
++    {
++        var workingDirectory = Path.Combine(Path.GetTempPath(), "coderefine", Guid.NewGuid().ToString("N"));
++        Directory.CreateDirectory(workingDirectory);
++
++        var args = branch is null
++            ? $"clone --depth 1 {cloneUrl} ."
++            : $"clone --depth 1 --branch {branch} {cloneUrl} .";
++
++        await RunGitAsync(workingDirectory, args, cancellationToken);
++        return workingDirectory;
++    }
++
++    public Task CheckoutAsync(string workingDirectory, string reference, CancellationToken cancellationToken = default)
++        => RunGitAsync(workingDirectory, $"checkout {reference}", cancellationToken);
++
++    public async Task<string> CreateBranchAsync(string workingDirectory, string branchName, CancellationToken cancellationToken = default)
++    {
++        await RunGitAsync(workingDirectory, $"checkout -b {branchName}", cancellationToken);
++        return branchName;
++    }
++
++    public async Task<bool> ApplyPatchAsync(string workingDirectory, string diffContent, CancellationToken cancellationToken = default)
++    {
++        var patchFile = Path.Combine(workingDirectory, $"{Guid.NewGuid():N}.patch");
++        await File.WriteAllTextAsync(patchFile, diffContent, cancellationToken);
++
++        try
++        {
++            await RunGitAsync(workingDirectory, $"apply \"{patchFile}\"", cancellationToken);
++            return true;
++        }
++        catch (InvalidOperationException ex)
++        {
++            _logger.LogWarning(ex, "Failed to apply patch in {WorkingDirectory}", workingDirectory);
++            return false;
++        }
++        finally
++        {
++            File.Delete(patchFile);
++        }
++    }
++
++    public async Task<string> CommitAsync(string workingDirectory, string message, CancellationToken cancellationToken = default)
++    {
++        await RunGitAsync(workingDirectory, "add -A", cancellationToken);
++        await RunGitAsync(workingDirectory, $"commit -m \"{message.Replace("\"", "\\\"")}\"", cancellationToken);
++        return await RunGitAsync(workingDirectory, "rev-parse HEAD", cancellationToken);
++    }
++
++    public Task PushAsync(string workingDirectory, string branchName, CancellationToken cancellationToken = default)
++        => RunGitAsync(workingDirectory, $"push origin {branchName}", cancellationToken);
++
++    public Task<string> GetFileContentAsync(string workingDirectory, string filePath, CancellationToken cancellationToken = default)
++        => File.ReadAllTextAsync(Path.Combine(workingDirectory, filePath), cancellationToken);
++
++    public void Cleanup(string workingDirectory)
++    {
++        try
++        {
++            if (Directory.Exists(workingDirectory))
++            {
++                Directory.Delete(workingDirectory, recursive: true);
++            }
++        }
++        catch (IOException ex)
++        {
++            _logger.LogWarning(ex, "Failed to clean up {WorkingDirectory}", workingDirectory);
++        }
++    }
++
++    private async Task<string> RunGitAsync(string workingDirectory, string arguments, CancellationToken cancellationToken)
++    {
++        var startInfo = new ProcessStartInfo("git", arguments)
++        {
++            WorkingDirectory = workingDirectory,
++            RedirectStandardOutput = true,
++            RedirectStandardError = true,
++            UseShellExecute = false,
++            CreateNoWindow = true
++        };
++
++        using var process = Process.Start(startInfo)
++            ?? throw new InvalidOperationException($"Unable to start git {arguments}");
++
++        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
++        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
++        await process.WaitForExitAsync(cancellationToken);
++
++        if (process.ExitCode != 0)
++        {
++            throw new InvalidOperationException($"git {arguments} failed: {error}");
++        }
++
++        return output.Trim();
++    }
++}
+diff --git a/Services/Git/IGitService.cs b/Services/Git/IGitService.cs
+new file mode 100644
+index 0000000..7d18e5d
+--- /dev/null
++++ b/Services/Git/IGitService.cs
+@@ -0,0 +1,20 @@
++namespace CodeRefine.Api.Services.Git;
++
++public interface IGitService
++{
++    Task<string> CloneAsync(string cloneUrl, string? branch = null, CancellationToken cancellationToken = default);
++
++    Task CheckoutAsync(string workingDirectory, string reference, CancellationToken cancellationToken = default);
++
++    Task<string> CreateBranchAsync(string workingDirectory, string branchName, CancellationToken cancellationToken = default);
++
++    Task<bool> ApplyPatchAsync(string workingDirectory, string diffContent, CancellationToken cancellationToken = default);
++
++    Task<string> CommitAsync(string workingDirectory, string message, CancellationToken cancellationToken = default);
++
++    Task PushAsync(string workingDirectory, string branchName, CancellationToken cancellationToken = default);
++
++    Task<string> GetFileContentAsync(string workingDirectory, string filePath, CancellationToken cancellationToken = default);
++
++    void Cleanup(string workingDirectory);
++}
+diff --git a/Services/GitHub/GitHubAppTokenProvider.cs b/Services/GitHub/GitHubAppTokenProvider.cs
+new file mode 100644
+index 0000000..ce1f9cd
+--- /dev/null
++++ b/Services/GitHub/GitHubAppTokenProvider.cs
+@@ -0,0 +1,183 @@
++using System.Security.Cryptography;
++using System.Text;
++using System.Text.Json;
++using CodeRefine.Api.Configuration;
++using CodeRefine.Api.Exceptions;
++using Microsoft.Extensions.Options;
++
++namespace CodeRefine.Api.Services.GitHub;
++
++/// <summary>
++/// Mints GitHub App installation access tokens.
++///
++/// Flow: sign a short-lived RS256 JWT with the App private key, exchange it for
++/// an installation access token, then cache that token until shortly before it
++/// expires. Tokens and the private key never leave this backend and are never
++/// written to logs.
++/// </summary>
++public class GitHubAppTokenProvider : IGitHubAppTokenProvider
++{
++    /// <summary>Refresh this far ahead of expiry to avoid using a token mid-flight.</summary>
++    private static readonly TimeSpan ExpiryBuffer = TimeSpan.FromMinutes(5);
++
++    /// <summary>Name of the configured GitHub HTTP client.</summary>
++    public const string HttpClientName = "github-app";
++
++    private readonly IHttpClientFactory _httpClientFactory;
++    private readonly GitHubSettings _settings;
++    private readonly ILogger<GitHubAppTokenProvider> _logger;
++    private readonly SemaphoreSlim _lock = new(1, 1);
++
++    private string? _cachedToken;
++    private DateTimeOffset _cachedTokenExpiresAt = DateTimeOffset.MinValue;
++
++    public GitHubAppTokenProvider(
++        IHttpClientFactory httpClientFactory,
++        IOptions<GitHubSettings> settings,
++        ILogger<GitHubAppTokenProvider> logger)
++    {
++        _httpClientFactory = httpClientFactory;
++        _settings = settings.Value;
++        _logger = logger;
++    }
++
++    public async Task<string> GetInstallationTokenAsync(CancellationToken cancellationToken = default)
++    {
++        if (IsCachedTokenUsable())
++        {
++            return _cachedToken!;
++        }
++
++        await _lock.WaitAsync(cancellationToken);
++
++        try
++        {
++            if (IsCachedTokenUsable())
++            {
++                return _cachedToken!;
++            }
++
++            var (token, expiresAt) = await RequestInstallationTokenAsync(cancellationToken);
++
++            _cachedToken = token;
++            _cachedTokenExpiresAt = expiresAt;
++
++            _logger.LogInformation(
++                "Acquired GitHub App installation token for installation {InstallationId}, expiring at {ExpiresAt:o}",
++                _settings.InstallationId, expiresAt);
++
++            return token;
++        }
++        finally
++        {
++            _lock.Release();
++        }
++    }
++
++    private bool IsCachedTokenUsable()
++        => _cachedToken is not null && DateTimeOffset.UtcNow < _cachedTokenExpiresAt - ExpiryBuffer;
++
++    private async Task<(string Token, DateTimeOffset ExpiresAt)> RequestInstallationTokenAsync(CancellationToken cancellationToken)
++    {
++        ValidateSettings();
++
++        var jwt = CreateAppJwt();
++
++        using var request = new HttpRequestMessage(
++            HttpMethod.Post,
++            $"/app/installations/{_settings.InstallationId}/access_tokens");
++
++        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jwt);
++
++        HttpResponseMessage response;
++
++        try
++        {
++            using var httpClient = _httpClientFactory.CreateClient(HttpClientName);
++            response = await httpClient.SendAsync(request, cancellationToken);
++        }
++        catch (HttpRequestException ex)
++        {
++            _logger.LogError(ex, "GitHub API call failed while requesting an installation token");
++            throw new GitHubApiException("Unable to reach GitHub to authenticate.", ex);
++        }
++
++        using (response)
++        {
++            if (!response.IsSuccessStatusCode)
++            {
++                // Body may echo credential details, so it is never surfaced or logged.
++                _logger.LogError(
++                    "GitHub App token exchange failed with status {StatusCode} for installation {InstallationId}",
++                    (int)response.StatusCode, _settings.InstallationId);
++
++                throw new GitHubApiException("GitHub rejected the CodeRefine App credentials.");
++            }
++
++            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
++            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
++
++            var token = document.RootElement.GetProperty("token").GetString()
++                ?? throw new GitHubApiException("GitHub returned an empty installation token.");
++
++            var expiresAt = document.RootElement.TryGetProperty("expires_at", out var expiresElement)
++                && expiresElement.TryGetDateTimeOffset(out var parsed)
++                    ? parsed
++                    : DateTimeOffset.UtcNow.AddMinutes(60);
++
++            return (token, expiresAt);
++        }
++    }
++
++    private void ValidateSettings()
++    {
++        if (string.IsNullOrWhiteSpace(_settings.AppId)
++            || string.IsNullOrWhiteSpace(_settings.PrivateKey)
++            || _settings.InstallationId <= 0)
++        {
++            throw new GitHubApiException("GitHub App credentials are not configured.");
++        }
++    }
++
++    /// <summary>
++    /// Builds the RS256 JWT GitHub requires for App-level authentication. Valid
++    /// for nine minutes; GitHub rejects anything over ten.
++    /// </summary>
++    private string CreateAppJwt()
++    {
++        var now = DateTimeOffset.UtcNow;
++
++        var header = new { alg = "RS256", typ = "JWT" };
++        var payload = new
++        {
++            iat = now.AddSeconds(-60).ToUnixTimeSeconds(),
++            exp = now.AddMinutes(9).ToUnixTimeSeconds(),
++            iss = _settings.AppId
++        };
++
++        var signingInput = $"{Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(header))}." +
++                           $"{Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payload))}";
++
++        using var rsa = RSA.Create();
++
++        try
++        {
++            rsa.ImportFromPem(_settings.PrivateKey);
++        }
++        catch (ArgumentException ex)
++        {
++            // Never include the key material in the exception.
++            throw new GitHubApiException("The configured GitHub App private key is not a valid PEM key.", ex);
++        }
++
++        var signature = rsa.SignData(
++            Encoding.UTF8.GetBytes(signingInput),
++            HashAlgorithmName.SHA256,
++            RSASignaturePadding.Pkcs1);
++
++        return $"{signingInput}.{Base64UrlEncode(signature)}";
++    }
++
++    private static string Base64UrlEncode(byte[] value)
++        => Convert.ToBase64String(value).TrimEnd('=').Replace('+', '-').Replace('/', '_');
++}
+diff --git a/Services/GitHub/GitHubService.cs b/Services/GitHub/GitHubService.cs
+new file mode 100644
+index 0000000..2060de9
+--- /dev/null
++++ b/Services/GitHub/GitHubService.cs
+@@ -0,0 +1,245 @@
++using CodeRefine.Api.Configuration;
++using CodeRefine.Api.Data;
++using CodeRefine.Api.DTOs.GitHub;
++using CodeRefine.Api.Exceptions;
++using Microsoft.EntityFrameworkCore;
++using Microsoft.Extensions.Options;
++using Octokit;
++
++namespace CodeRefine.Api.Services.GitHub;
++
++/// <summary>
++/// GitHub App backed implementation. This is the only component permitted to
++/// talk to GitHub; installation tokens never leave this class.
++/// </summary>
++public class GitHubService : IGitHubService
++{
++    private readonly IGitHubAppTokenProvider _tokenProvider;
++    private readonly AppDbContext _dbContext;
++    private readonly GitHubSettings _settings;
++    private readonly ILogger<GitHubService> _logger;
++
++    public GitHubService(
++        IGitHubAppTokenProvider tokenProvider,
++        AppDbContext dbContext,
++        IOptions<GitHubSettings> settings,
++        ILogger<GitHubService> logger)
++    {
++        _tokenProvider = tokenProvider;
++        _dbContext = dbContext;
++        _settings = settings.Value;
++        _logger = logger;
++    }
++
++    /// <summary>
++    /// Lists repositories visible to the installation and mirrors them into the
++    /// database so every repository has a stable internal identifier.
++    /// </summary>
++    public async Task<IReadOnlyList<RepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default)
++    {
++        var client = await CreateClientAsync(cancellationToken);
++
++        var response = await ExecuteAsync(
++            () => client.GitHubApps.Installation.GetAllRepositoriesForCurrent(),
++            "list installation repositories");
++
++        var tracked = await _dbContext.Repositories.ToListAsync(cancellationToken);
++        var results = new List<RepositoryDto>(response.Repositories.Count);
++
++        foreach (var remote in response.Repositories)
++        {
++            var owner = remote.Owner.Login;
++
++            var local = tracked.FirstOrDefault(r => r.Owner == owner && r.Name == remote.Name);
++
++            if (local is null)
++            {
++                local = new Models.Repository
++                {
++                    Owner = owner,
++                    Name = remote.Name
++                };
++
++                _dbContext.Repositories.Add(local);
++            }
++
++            local.GitHubRepoId = remote.Id.ToString();
++            local.DefaultBranch = remote.DefaultBranch ?? "main";
++            local.IsPrivate = remote.Private;
++            local.InstallationId = _settings.InstallationId;
++
++            results.Add(MapToDto(local));
++        }
++
++        await _dbContext.SaveChangesAsync(cancellationToken);
++
++        _logger.LogInformation("Synced {RepositoryCount} repositories from the GitHub App installation", results.Count);
++
++        return results;
++    }
++
++    public async Task<IReadOnlyList<BranchDto>> GetBranchesAsync(Guid repositoryId, CancellationToken cancellationToken = default)
++    {
++        var repository = await GetTrackedRepositoryAsync(repositoryId, cancellationToken);
++        var client = await CreateClientAsync(cancellationToken);
++
++        var branches = await ExecuteAsync(
++            () => client.Repository.Branch.GetAll(repository.Owner, repository.Name),
++            $"list branches for repository {repositoryId}");
++
++        return branches.Select(branch => new BranchDto
++        {
++            Name = branch.Name,
++            CommitSha = branch.Commit?.Sha ?? string.Empty,
++            IsProtected = branch.Protected,
++            IsDefault = string.Equals(branch.Name, repository.DefaultBranch, StringComparison.Ordinal)
++        }).ToList();
++    }
++
++    public async Task<IReadOnlyList<PullRequestDto>> GetPullRequestsAsync(
++        Guid repositoryId,
++        string state = "open",
++        CancellationToken cancellationToken = default)
++    {
++        var repository = await GetTrackedRepositoryAsync(repositoryId, cancellationToken);
++        var client = await CreateClientAsync(cancellationToken);
++
++        var request = new PullRequestRequest { State = ParseState(state) };
++
++        var pullRequests = await ExecuteAsync(
++            () => client.PullRequest.GetAllForRepository(repository.Owner, repository.Name, request),
++            $"list pull requests for repository {repositoryId}");
++
++        return pullRequests.Select(MapToDto).ToList();
++    }
++
++    public async Task<PullRequestDto> GetPullRequestAsync(Guid repositoryId, int number, CancellationToken cancellationToken = default)
++    {
++        var repository = await GetTrackedRepositoryAsync(repositoryId, cancellationToken);
++        var client = await CreateClientAsync(cancellationToken);
++
++        var pullRequest = await ExecuteAsync(
++            () => client.PullRequest.Get(repository.Owner, repository.Name, number),
++            $"get pull request #{number} for repository {repositoryId}");
++
++        return MapToDto(pullRequest);
++    }
++
++    public async Task<IReadOnlyList<PullRequestFileDto>> GetPullRequestFilesAsync(
++        Guid repositoryId,
++        int number,
++        CancellationToken cancellationToken = default)
++    {
++        var repository = await GetTrackedRepositoryAsync(repositoryId, cancellationToken);
++        var client = await CreateClientAsync(cancellationToken);
++
++        var files = await ExecuteAsync(
++            () => client.PullRequest.Files(repository.Owner, repository.Name, number),
++            $"list files for pull request #{number} in repository {repositoryId}");
++
++        return files.Select(file => new PullRequestFileDto
++        {
++            FileName = file.FileName,
++            Status = file.Status,
++            Additions = file.Additions,
++            Deletions = file.Deletions,
++            Changes = file.Changes,
++            Patch = file.Patch,
++            ContentsUrl = file.ContentsUrl
++        }).ToList();
++    }
++
++    public Task<PullRequestDto> CreateImprovementPullRequestAsync(
++        Guid repositoryId,
++        string branchName,
++        string baseBranch,
++        IReadOnlyDictionary<string, string> fileContents,
++        string commitMessage,
++        string title,
++        string body,
++        CancellationToken cancellationToken = default)
++        => throw new NotImplementedException("Improvement pull request delivery is implemented in Step 6.");
++
++    private async Task<Models.Repository> GetTrackedRepositoryAsync(Guid repositoryId, CancellationToken cancellationToken)
++        => await _dbContext.Repositories.FirstOrDefaultAsync(r => r.Id == repositoryId, cancellationToken)
++            ?? throw new Exceptions.NotFoundException($"Repository '{repositoryId}' was not found.");
++
++    private async Task<GitHubClient> CreateClientAsync(CancellationToken cancellationToken)
++    {
++        var token = await _tokenProvider.GetInstallationTokenAsync(cancellationToken);
++
++        return new GitHubClient(new ProductHeaderValue(_settings.UserAgent))
++        {
++            Credentials = new Credentials(token)
++        };
++    }
++
++    /// <summary>
++    /// Runs a GitHub call and converts Octokit failures into safe API errors.
++    /// GitHub response bodies are not surfaced, so tokens cannot leak.
++    /// </summary>
++    private async Task<T> ExecuteAsync<T>(Func<Task<T>> operation, string description)
++    {
++        try
++        {
++            return await operation();
++        }
++        catch (Octokit.NotFoundException ex)
++        {
++            _logger.LogWarning(ex, "GitHub API call failed: {Description} returned not found", description);
++            throw new Exceptions.NotFoundException("The requested GitHub resource was not found.");
++        }
++        catch (AuthorizationException ex)
++        {
++            _logger.LogError(ex, "GitHub API call failed: {Description} was not authorised", description);
++            throw new GitHubApiException("CodeRefine is not authorised to access this GitHub resource.");
++        }
++        catch (RateLimitExceededException ex)
++        {
++            _logger.LogError(ex, "GitHub API call failed: {Description} exceeded the rate limit", description);
++            throw new GitHubApiException("The GitHub API rate limit has been exceeded. Try again later.");
++        }
++        catch (ApiException ex)
++        {
++            _logger.LogError(ex, "GitHub API call failed: {Description} returned status {StatusCode}",
++                description, (int)ex.StatusCode);
++            throw new GitHubApiException("The GitHub API request failed.");
++        }
++    }
++
++    private static ItemStateFilter ParseState(string state) => state?.ToLowerInvariant() switch
++    {
++        "closed" => ItemStateFilter.Closed,
++        "all" => ItemStateFilter.All,
++        _ => ItemStateFilter.Open
++    };
++
++    private static RepositoryDto MapToDto(Models.Repository repository) => new()
++    {
++        Id = repository.Id,
++        Owner = repository.Owner,
++        Name = repository.Name,
++        FullName = repository.FullName,
++        DefaultBranch = repository.DefaultBranch,
++        IsPrivate = repository.IsPrivate,
++        CreatedAt = repository.CreatedAt
++    };
++
++    private static PullRequestDto MapToDto(Octokit.PullRequest pullRequest) => new()
++    {
++        Number = pullRequest.Number,
++        Title = pullRequest.Title,
++        Body = pullRequest.Body,
++        State = pullRequest.State.StringValue,
++        AuthorLogin = pullRequest.User?.Login,
++        HeadBranch = pullRequest.Head?.Ref ?? string.Empty,
++        BaseBranch = pullRequest.Base?.Ref ?? string.Empty,
++        HeadSha = pullRequest.Head?.Sha ?? string.Empty,
++        HtmlUrl = pullRequest.HtmlUrl,
++        ChangedFiles = pullRequest.ChangedFiles,
++        Additions = pullRequest.Additions,
++        Deletions = pullRequest.Deletions,
++        CreatedAt = pullRequest.CreatedAt.UtcDateTime,
++        UpdatedAt = pullRequest.UpdatedAt.UtcDateTime
++    };
++}
+diff --git a/Services/GitHub/IGitHubAppTokenProvider.cs b/Services/GitHub/IGitHubAppTokenProvider.cs
+new file mode 100644
+index 0000000..2b1c9e8
+--- /dev/null
++++ b/Services/GitHub/IGitHubAppTokenProvider.cs
+@@ -0,0 +1,10 @@
++namespace CodeRefine.Api.Services.GitHub;
++
++/// <summary>
++/// Supplies short-lived GitHub App installation access tokens. Implementations
++/// must keep credentials inside the backend and out of logs and responses.
++/// </summary>
++public interface IGitHubAppTokenProvider
++{
++    Task<string> GetInstallationTokenAsync(CancellationToken cancellationToken = default);
++}
+diff --git a/Services/GitHub/IGitHubService.cs b/Services/GitHub/IGitHubService.cs
+new file mode 100644
+index 0000000..9387bab
+--- /dev/null
++++ b/Services/GitHub/IGitHubService.cs
+@@ -0,0 +1,35 @@
++using CodeRefine.Api.DTOs.GitHub;
++
++namespace CodeRefine.Api.Services.GitHub;
++
++/// <summary>
++/// All GitHub access flows through this abstraction. Controllers must never
++/// call GitHub directly, and credentials never leave this backend.
++/// </summary>
++public interface IGitHubService
++{
++    Task<IReadOnlyList<RepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default);
++
++    Task<IReadOnlyList<BranchDto>> GetBranchesAsync(Guid repositoryId, CancellationToken cancellationToken = default);
++
++    Task<IReadOnlyList<PullRequestDto>> GetPullRequestsAsync(Guid repositoryId, string state = "open", CancellationToken cancellationToken = default);
++
++    Task<PullRequestDto> GetPullRequestAsync(Guid repositoryId, int number, CancellationToken cancellationToken = default);
++
++    Task<IReadOnlyList<PullRequestFileDto>> GetPullRequestFilesAsync(Guid repositoryId, int number, CancellationToken cancellationToken = default);
++
++    /// <summary>
++    /// Creates the improvement branch, commits the approved and verified file
++    /// contents, pushes, and opens a pull request. Only called after the
++    /// approval gate has passed.
++    /// </summary>
++    Task<PullRequestDto> CreateImprovementPullRequestAsync(
++        Guid repositoryId,
++        string branchName,
++        string baseBranch,
++        IReadOnlyDictionary<string, string> fileContents,
++        string commitMessage,
++        string title,
++        string body,
++        CancellationToken cancellationToken = default);
++}
+diff --git a/appsettings.Development.json b/appsettings.Development.json
+new file mode 100644
+index 0000000..06ccb45
+--- /dev/null
++++ b/appsettings.Development.json
+@@ -0,0 +1,11 @@
++{
++  "Logging": {
++    "LogLevel": {
++      "Default": "Information",
++      "Microsoft.AspNetCore": "Warning"
++    }
++  },
++  "ConnectionStrings": {
++    "DefaultConnection": "Host=localhost;Port=5432;Database=coderefine_dev;Username=postgres;Password=postgres"
++  }
++}
+diff --git a/appsettings.json b/appsettings.json
+new file mode 100644
+index 0000000..fe337db
+--- /dev/null
++++ b/appsettings.json
+@@ -0,0 +1,25 @@
++{
++  "Logging": {
++    "LogLevel": {
++      "Default": "Information",
++      "Microsoft.AspNetCore": "Warning"
++    }
++  },
++  "AllowedHosts": "*",
++  "ConnectionStrings": {
++    "DefaultConnection": "Host=localhost;Port=5432;Database=coderefine;Username=postgres;Password="
++  },
++  "GitHub": {
++    "ApiBaseUrl": "https://api.github.com",
++    "UserAgent": "CodeRefine",
++    "AppId": "",
++    "PrivateKey": "",
++    "InstallationId": 0,
++    "CommitterName": "CodeRefine Bot",
++    "CommitterEmail": "bot@coderefine.local"
++  },
++  "AiService": {
++    "BaseUrl": "http://localhost:8000",
++    "TimeoutSeconds": 300
++  }
++}
+diff --git a/sw.err b/sw.err
+new file mode 100644
+index 0000000..e69de29
+-- 
+2.55.0.windows.3
+
