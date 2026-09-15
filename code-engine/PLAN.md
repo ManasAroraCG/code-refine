@@ -98,6 +98,17 @@ Deterministic tools only — no LLM calls here (keeps cost down per section 12):
   severity, category, title, description) — mirrors the `findings` DB table so Dev 2/Dev 5
   don't need to re-map fields.
 
+### 3.3a AI Analysis (temporary stand-in, `analysis/ai_stub.py` + `ai_runner.py`)
+Dev 2 hasn't built the real agent service yet, so this is a **temporary** placeholder to be
+deleted once Dev 2's LangGraph/NIM agents exist:
+- Calls Gemini directly per changed file, seeded with that file's static findings so the
+  model doesn't waste tokens re-reporting what ruff/mypy/bandit already caught.
+- Normalizes output into the same `Finding` shape (`agent_type="ai:<category>"`).
+- `analysis/aggregator.py` combines static + AI findings into one list via `POST /analyze` —
+  this is the shape to forward downstream to a future fix-planner.
+- Verified working end-to-end: static findings for lint/security issues, AI finding for a
+  duplicated/dead-code loop, no overlap between the two.
+
 ### 3.4 Patch Applier (`patch/applier.py`)
 Implements section 13:
 - Accepts a structured patch (file path, original code, proposed code, or a unified diff).
@@ -147,8 +158,8 @@ in section 20 — confirm final request/response shapes with Dev 2 before Day 3.
   - [ ] Confirm `CodeContext` schema with Dev 2
 
 - **Day 3 — First vertical slice (critical checkpoint)**
-  - [ ] Support the single path: PR → clone → context for Redundancy agent → finding
-  - [ ] `Finding` schema locked with Dev 2/Dev 5 (matches `findings` table)
+  - [x] Support the single path: PR → clone → context → findings (static + temporary AI stand-in via `POST /analyze`)
+  - [x] `Finding` schema locked (shared by ruff/mypy/bandit/AI stand-in; confirm with Dev 2 once their agents exist)
 
 - **Day 4 — Static tools for remaining agents**
   - [x] Integrate `ruff` wrapper (Python lint findings via `POST /static-analysis`)
@@ -156,12 +167,12 @@ in section 20 — confirm final request/response shapes with Dev 2 before Day 3.
   - [x] Integrate `bandit` for the Security agent's deterministic half
 
 - **Day 5 — Patch application**
-  - [ ] `patch/applier.py`: apply structured patch / unified diff to a workspace file
-  - [ ] Return before/after diff for the `patches` table
+  - [x] `patch/applier.py`: apply structured patch / unified diff to a workspace file
+  - [x] Return before/after diff for the `patches` table
 
 - **Day 6 — Verification engine**
-  - [ ] Docker sandbox: syntax, lint, type check, tests, build, security
-  - [ ] Aggregate verdict + wire one repair-retry hook (max 1–2 retries, owned upstream by Dev 2)
+  - [x] Docker sandbox: syntax, lint, type check, tests, build, security
+  - [x] Aggregate verdict (`passed`/`failed` per check + overall) — repair-retry hook is owned upstream by Dev 2 (their repair loop calls back into `/generate-fix` → `/apply-patch` → `/verify`)
 
 - **Day 7 — Support GitHub write-back**
   - [ ] Ensure workspace/patch outputs are in a form Dev 1 can commit/push directly

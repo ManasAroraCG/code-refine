@@ -13,7 +13,7 @@ def build_context(repo_path, changed_files):
         if not file_path.is_file():
             continue
 
-        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        content = file_path.read_text(encoding="utf-8-sig", errors="ignore")
 
         symbols = []
         if file_path.suffix == ".py":
