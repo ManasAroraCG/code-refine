@@ -1,0 +1,200 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = "postgresql://neondb_owner:npg_FWRN2ZoSGBc6@ep-still-moon-a56yu2cf-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+  directUrl = "postgresql://neondb_owner:npg_FWRN2ZoSGBc6@ep-still-moon-a56yu2cf-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+}
+
+model User {
+  id           String       @id @default(uuid()) @db.Uuid
+  githubLogin  String       @unique @db.VarChar(200)
+  displayName  String?
+  email        String?
+  avatarUrl    String?
+  createdAt    DateTime     @default(now())
+  repositories Repository[]
+  reviews      Review[]
+
+  @@map("Users")
+}
+
+model Repository {
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String?       @db.Uuid
+  githubRepoId   String        @db.VarChar(100)
+  owner          String        @db.VarChar(200)
+  name           String        @db.VarChar(200)
+  defaultBranch  String        @default("main")
+  installationId BigInt?
+  isPrivate      Boolean
+  createdAt      DateTime      @default(now())
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  analysisRuns   AnalysisRun[]
+
+  @@unique([owner, name])
+  @@map("Repositories")
+}
+
+model AnalysisRun {
+  id                  String               @id @default(uuid()) @db.Uuid
+  repositoryId        String               @db.Uuid
+  pullRequestNumber   Int?
+  sourceBranch        String?
+  targetBranch        String?
+  commitSha           String?
+  status              AnalysisStatus       @default(Queued)
+  errorMessage        String?
+  qualityScoreBefore  Float?
+  qualityScoreAfter   Float?
+  improvementBranch   String?
+  improvementPrNumber Int?
+  improvementPrUrl    String?
+  startedAt           DateTime             @default(now())
+  completedAt         DateTime?
+  repository          Repository           @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  findings            Finding[]
+  verificationResults VerificationResult[]
+  reviews             Review[]
+
+  @@index([repositoryId, startedAt])
+  @@map("AnalysisRuns")
+}
+
+model Finding {
+  id            String          @id @default(uuid()) @db.Uuid
+  analysisRunId String          @db.Uuid
+  agentType     String          @db.VarChar(100)
+  filePath      String          @db.VarChar(1000)
+  startLine     Int
+  endLine       Int
+  category      String?
+  severity      FindingSeverity @default(Info)
+  title         String          @db.VarChar(500)
+  description   String?
+  recommendation String?
+  confidence    Float
+  status        FindingStatus   @default(Open)
+  createdAt     DateTime        @default(now())
+  analysisRun   AnalysisRun     @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  patches       Patch[]
+  reviews       Review[]
+
+  @@index([analysisRunId])
+  @@map("Findings")
+}
+
+model Patch {
+  id           String      @id @default(uuid()) @db.Uuid
+  findingId    String      @db.Uuid
+  filePath     String      @db.VarChar(1000)
+  originalCode String
+  proposedCode String
+  diff         String
+  explanation  String?
+  status       PatchStatus @default(Proposed)
+  createdAt    DateTime    @default(now())
+  finding      Finding     @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  reviews      Review[]
+
+  @@index([findingId])
+  @@map("Patches")
+}
+
+model VerificationResult {
+  id            String                @id @default(uuid()) @db.Uuid
+  analysisRunId String                @db.Uuid
+  checkType     VerificationCheckType
+  status        VerificationStatus    @default(Pending)
+  output        String?
+  durationMs    BigInt
+  createdAt     DateTime              @default(now())
+  analysisRun   AnalysisRun           @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+
+  @@unique([analysisRunId, checkType])
+  @@map("VerificationResults")
+}
+
+model Review {
+  id            String         @id @default(uuid()) @db.Uuid
+  analysisRunId String         @db.Uuid
+  findingId     String?        @db.Uuid
+  patchId       String?        @db.Uuid
+  userId        String?        @db.Uuid
+  decision      ReviewDecision @default(Pending)
+  comment       String?
+  createdAt     DateTime       @default(now())
+  analysisRun   AnalysisRun    @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  finding       Finding?       @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  patch         Patch?         @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([analysisRunId])
+  @@map("Reviews")
+}
+
+enum AnalysisStatus {
+  Queued
+  Analyzing
+  GeneratingFixes
+  Verifying
+  ReadyForReview
+  Approved
+  Rejected
+  CreatingPullRequest
+  Completed
+  Failed
+}
+
+enum FindingSeverity {
+  Info
+  Low
+  Medium
+  High
+  Critical
+}
+
+enum FindingStatus {
+  Open
+  PatchProposed
+  Verified
+  Accepted
+  Rejected
+  Dismissed
+}
+
+enum PatchStatus {
+  Proposed
+  Verified
+  VerificationFailed
+  Approved
+  Rejected
+  Applied
+}
+
+enum ReviewDecision {
+  Pending
+  Approved
+  Rejected
+  ChangesRequested
+}
+
+enum VerificationCheckType {
+  Syntax
+  Lint
+  TypeCheck
+  Tests
+  Build
+  Security
+}
+
+enum VerificationStatus {
+  Pending
+  Running
+  Passed
+  Failed
+  Skipped
+  Error
+}
