@@ -41,6 +41,8 @@ class WorkspaceManager:
         return repo_path
 
     def get_changed_files(self, repo_path, base, head="HEAD"):
+        self._ensure_ref(repo_path, base)
+
         result = subprocess.run(
             ["git", "diff", "--name-only", f"{base}...{head}"],
             cwd=repo_path,
@@ -50,3 +52,22 @@ class WorkspaceManager:
         )
 
         return [line for line in result.stdout.splitlines() if line]
+
+    def _ensure_ref(self, repo_path, ref):
+        """Fetch `ref` from origin if it isn't resolvable locally (e.g. base branch on a --single-branch clone)."""
+        check = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", ref],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+        if check.returncode == 0:
+            return
+
+        subprocess.run(
+            ["git", "fetch", "origin", f"{ref}:{ref}"],
+            cwd=repo_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
