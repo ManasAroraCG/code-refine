@@ -1,4 +1,4 @@
-import  { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowDown,
   ArrowRight,
@@ -17,6 +17,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { dashboardService } from '../services/dashboardService';
 
 const beforeCode = `async function processUser(data) {
   if (data && data.email) {
@@ -404,6 +405,19 @@ function HowItWorks() {
 
 export default function Dashboard() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [repositories, setRepositories] = useState([]);
+  const [apiStatus, setApiStatus] = useState('Loading repositories...');
+
+  useEffect(() => {
+    dashboardService.getRepositories()
+      .then((data) => {
+        setRepositories(data);
+        setApiStatus(`${data.length} repositories connected`);
+      })
+      .catch((error) => {
+        setApiStatus(error.response?.data?.detail || error.message || 'Unable to load repositories');
+      });
+  }, []);
 
   return (
     <main className="min-h-screen overflow-hidden bg-white text-slate-950">
@@ -440,6 +454,22 @@ export default function Dashboard() {
           </button>
         </div>
       </header>
+
+      <section className="px-5 pb-2 pt-28 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600">Live API connection</p>
+            <p className="mt-2 text-sm text-slate-700">{apiStatus}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {repositories.slice(0, 3).map((repository) => (
+              <span key={repository.gitHubRepoId || repository.githubRepoId} className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm">
+                {repository.fullName}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <section id="top" className="relative px-5 pb-24 pt-36 sm:pt-44 lg:px-8">
         <div className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[620px] w-[900px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,rgba(219,234,254,.75),transparent_68%)]" />
