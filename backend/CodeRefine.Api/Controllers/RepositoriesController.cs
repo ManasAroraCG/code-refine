@@ -23,9 +23,13 @@ public class RepositoriesController : ControllerBase
         => Ok(await _gitHubService.GetRepositoriesAsync(cancellationToken));
 
     /// <summary>Lists branches for a repository, identified by its internal CodeRefine id.</summary>
-    [HttpGet("{id:guid}/branches")]
-    [ProducesResponseType(typeof(IReadOnlyList<BranchDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<IReadOnlyList<BranchDto>>> GetBranches(Guid id, CancellationToken cancellationToken)
-        => Ok(await _gitHubService.GetBranchesAsync(id, cancellationToken));
+    [HttpGet("{id}/branches")]
+    public async Task<ActionResult<IReadOnlyList<BranchDto>>> GetBranches(
+      string id,
+      CancellationToken cancellationToken)
+    {
+        return Ok(await _gitHubService.GetBranchesAsync(
+            id,
+            cancellationToken));
+    }
 }

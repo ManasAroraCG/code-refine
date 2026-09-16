@@ -10,13 +10,13 @@ public interface IGitHubService
 {
     Task<IReadOnlyList<RepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<BranchDto>> GetBranchesAsync(Guid repositoryId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BranchDto>> GetBranchesAsync(string githubRepoId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<PullRequestDto>> GetPullRequestsAsync(Guid repositoryId, string state = "open", CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PullRequestDto>> GetPullRequestsAsync(string githubRepoId, string state = "open", CancellationToken cancellationToken = default);
 
-    Task<PullRequestDto> GetPullRequestAsync(Guid repositoryId, int number, CancellationToken cancellationToken = default);
+    Task<PullRequestDto> GetPullRequestAsync(string githubRepoId, int number, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<PullRequestFileDto>> GetPullRequestFilesAsync(Guid repositoryId, int number, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PullRequestFileDto>> GetPullRequestFilesAsync(string githubRepoId, int number, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates the improvement branch, commits the approved and verified file
