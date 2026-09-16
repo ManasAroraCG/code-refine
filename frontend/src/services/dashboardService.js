@@ -1,6 +1,15 @@
-import { api } from './api';
+import { codeRefineService } from './codeRefineService';
 
 export const dashboardService = {
-  getSummary: () => api.get('/dashboard/summary'),
-  getStats: () => api.get('/dashboard/stats'),
+  getRepositories: codeRefineService.getRepositories,
+  getBranches: codeRefineService.getBranches,
+  getPullRequests: codeRefineService.getPullRequests,
+  startAnalysis: codeRefineService.startAnalysis,
+  getAnalysis: codeRefineService.getAnalysis,
+  getFindings: codeRefineService.getFindings,
+  getPatches: codeRefineService.getPatches,
+  getVerification: codeRefineService.getVerification,
+  approveAnalysis: codeRefineService.approveAnalysis,
+  rejectAnalysis: codeRefineService.rejectAnalysis,
+  createImprovementPullRequest: codeRefineService.createImprovementPullRequest,
 };

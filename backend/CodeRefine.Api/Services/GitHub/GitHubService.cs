@@ -266,7 +266,7 @@ public class GitHubService : IGitHubService
 
     private static RepositoryDto MapToDto(Models.Repository repository) => new()
     {
-   
+        Id = repository.Id,
         GitHubRepoId = repository.GitHubRepoId,
         Owner = repository.Owner,
         Name = repository.Name,

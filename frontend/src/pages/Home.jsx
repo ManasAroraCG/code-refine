@@ -21,13 +21,12 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import {
-  approveChanges,
-  connectGitHub,
-  requestDemo,
-  reviewChanges,
-  startReview,
-} from '../services/dummyApi';
+import { codeRefineService } from '../services/codeRefineService';
+
+const connectGitHub = () => codeRefineService.getRepositories();
+const startReview = () => codeRefineService.startAnalysis();
+const approveChanges = () => codeRefineService.approveAnalysis();
+const reviewChanges = () => codeRefineService.rejectAnalysis();
 
 const beforeCode = `async function processUser(data) {
   if (data && data.email) {
@@ -571,9 +570,14 @@ export default function Home() {
     setStatusMessage(`${label} started...`);
     try {
       const result = await action();
-      setStatusMessage(result.message || `${label} completed.`);
-    } catch {
-      setStatusMessage('Something went wrong. Please try again.');
+      const message = Array.isArray(result)
+        ? `${result.length} repositories loaded.`
+        : result?.status
+          ? `Analysis ${String(result.status).toLowerCase()}.`
+          : `${label} completed.`;
+      setStatusMessage(message);
+    } catch (error) {
+      setStatusMessage(error.response?.data?.detail || error.message || 'Something went wrong. Please try again.');
     }
   };
 
@@ -847,10 +851,10 @@ export default function Home() {
             </button>
             <button
               type="button"
-              onClick={() => handleAction('Talk to sales', requestDemo)}
+              onClick={() => handleAction('Load repositories', connectGitHub)}
               className="rounded-full border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
             >
-              Talk to sales <ArrowRight className="ml-1 inline size-4" />
+              Load repositories <ArrowRight className="ml-1 inline size-4" />
             </button>
           </div>
         </div>

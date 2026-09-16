@@ -2,6 +2,8 @@ namespace CodeRefine.Api.DTOs.GitHub;
 
 public class RepositoryDto
 {
+    public Guid Id { get; set; }
+
     /// <summary>
     /// Repository ID assigned by GitHub.
     /// </summary>
