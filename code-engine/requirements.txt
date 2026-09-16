@@ -4,5 +4,8 @@ pydantic==2.13.5
 ruff==0.16.7
 mypy==2.3.1
 bandit==1.9.4
-google-generativeai==0.8.6
 python-dotenv==1.2.3
+langchain==0.3.20
+langchain-core==0.3.43
+langgraph==0.2.74
+langchain-groq==0.2.5

@@ -1,12 +1,13 @@
 import subprocess
-
+from typing import List, Union
 from fastapi import APIRouter, HTTPException
 
-from app.analysis.aggregator import aggregate_findings
-from app.analysis.ai_runner import run_ai_analysis
 from app.analysis.runner import run_static_analysis
 from app.context.builder import build_context
 from app.models.schemas import (
+    AgentFindingDto,
+    AnalyzeRequest,
+    AnalyzeResponse,
     CloneRequest,
     CodeContext,
     ContextRequest,
@@ -15,10 +16,12 @@ from app.models.schemas import (
     PatchResult,
     VerificationResult,
     VerifyRequest,
+    WorkflowResponse,
     WorkspaceResponse,
 )
 from app.patch.applier import apply_patch
 from app.sandbox.verification import run_verification
+from app.workflow.graph import run_coderefine_workflow
 from app.workspace.manager import WorkspaceManager
 
 router = APIRouter()
@@ -56,22 +59,74 @@ def get_context(request: ContextRequest):
     return build_context(request.repo_path, request.changed_files)
 
 
-@router.post("/static-analysis", response_model=list[Finding])
+@router.post("/static-analysis", response_model=List[Finding])
 def static_analysis(request: ContextRequest):
     return run_static_analysis(request.repo_path, request.changed_files)
 
 
-@router.post("/ai-analysis", response_model=list[Finding])
-def ai_analysis(request: ContextRequest):
-    """TEMPORARY stand-in for Dev 2's AI agent service - remove once that service exists."""
-    context = build_context(request.repo_path, request.changed_files)
-    return run_ai_analysis(context.changed_files)
+@router.post("/analyze", response_model=AnalyzeResponse)
+def analyze(request: AnalyzeRequest):
+    """Integrated LangGraph Multi-Agent analysis returning backend-compatible AnalyzeResponse."""
+    repo_path = request.repo_path or request.repository_path or ""
+    changed_files = request.changed_files or []
+    analysis_id = request.analysis_id or "analysis-default"
+
+    final_state = run_coderefine_workflow(
+        repo_path=repo_path,
+        changed_files=changed_files,
+        analysis_id=analysis_id,
+    )
+
+    findings: List[AgentFindingDto] = []
+    for f in final_state.get("aggregated_findings", []):
+        findings.append(
+            AgentFindingDto(
+                agent=f.agent_type,
+                file=f.file or f.file_path or "",
+                start_line=f.start_line,
+                end_line=f.end_line,
+                severity=f.severity,
+                category=f.category,
+                title=f.title,
+                description=f.description,
+                recommendation=f.recommendation,
+                confidence=f.confidence,
+                fix_available=f.fix_available,
+            )
+        )
+
+    return AnalyzeResponse(
+        analysis_id=analysis_id,
+        findings=findings,
+        quality_score=final_state.get("quality_score", 100.0),
+    )
 
 
-@router.post("/analyze", response_model=list[Finding])
-def analyze(request: ContextRequest):
-    """Combined static + AI findings for a set of changed files - the shape to forward downstream."""
-    return aggregate_findings(request.repo_path, request.changed_files)
+@router.post("/workflow/run", response_model=WorkflowResponse)
+def run_workflow_endpoint(request: AnalyzeRequest):
+    """Run full LangGraph workflow and return complete state including fix plan, patches, verification, and repair history."""
+    repo_path = request.repo_path or request.repository_path or ""
+    changed_files = request.changed_files or []
+    analysis_id = request.analysis_id or "analysis-full-run"
+
+    final_state = run_coderefine_workflow(
+        repo_path=repo_path,
+        changed_files=changed_files,
+        analysis_id=analysis_id,
+    )
+
+    return WorkflowResponse(
+        analysis_id=analysis_id,
+        status=final_state.get("status", "completed"),
+        quality_score=final_state.get("quality_score", 100.0),
+        findings=final_state.get("aggregated_findings", []),
+        fix_plan=final_state.get("fix_plan", []),
+        generated_patches=final_state.get("generated_patches", []),
+        combined_diff=final_state.get("combined_diff", ""),
+        verification_result=final_state.get("verification_result"),
+        retry_count=final_state.get("retry_count", 0),
+        repair_history=final_state.get("repair_history", []),
+    )
 
 
 @router.post("/apply-patch", response_model=PatchResult)
