@@ -1,0 +1,141 @@
+import uuid
+from typing import List, Optional
+from langgraph.graph import END, START, StateGraph
+
+from app.analysis.runner import run_static_analysis
+from app.context.builder import build_context
+from app.models.schemas import CodeContext, Finding
+from app.workflow.agents import (
+    dead_code_agent_node,
+    efficiency_agent_node,
+    redundancy_agent_node,
+    security_agent_node,
+)
+from app.workflow.aggregator import aggregator_node
+from app.workflow.patcher import apply_patch_node, patch_generator_node
+from app.workflow.planner import fix_planner_node
+from app.workflow.repair import retry_patch_generator_node
+from app.workflow.state import CodeRefineState
+from app.workflow.verifier import route_verification, verification_node
+
+
+def prepare_input_node(state: CodeRefineState) -> dict:
+    """Ensure state defaults and containers are clean before fan-out."""
+    return {
+        "analysis_id": state.get("analysis_id") or f"run-{uuid.uuid4().hex[:8]}",
+        "repo_path": state.get("repo_path", ""),
+        "changed_files": state.get("changed_files", []),
+        "code_context": state.get("code_context") or CodeContext(),
+        "static_findings": state.get("static_findings", []),
+        "ai_findings": [],
+        "aggregated_findings": [],
+        "quality_score": state.get("quality_score", 0.0),
+        "fix_plan": [],
+        "generated_patches": [],
+        "combined_diff": "",
+        "verification_result": None,
+        "retry_count": 0,
+        "max_retries": state.get("max_retries", 2),
+        "repair_feedback": None,
+        "repair_history": [],
+        "status": "prepared",
+    }
+
+
+def build_graph():
+    """Build and compile the complete CodeRefine LangGraph StateGraph."""
+    graph = StateGraph(CodeRefineState)
+
+    # Add all workflow nodes
+    graph.add_node("prepare_input", prepare_input_node)
+    graph.add_node("redundancy_agent", redundancy_agent_node)
+    graph.add_node("efficiency_agent", efficiency_agent_node)
+    graph.add_node("dead_code_agent", dead_code_agent_node)
+    graph.add_node("security_agent", security_agent_node)
+    graph.add_node("aggregator", aggregator_node)
+    graph.add_node("fix_planner", fix_planner_node)
+    graph.add_node("patch_generator", patch_generator_node)
+    graph.add_node("apply_patch", apply_patch_node)
+    graph.add_node("verification", verification_node)
+    graph.add_node("retry_patch_generator", retry_patch_generator_node)
+
+    # Entry to input preparation
+    graph.add_edge(START, "prepare_input")
+
+    # Fan-Out: Parallel execution of the 4 specialized AI agents
+    graph.add_edge("prepare_input", "redundancy_agent")
+    graph.add_edge("prepare_input", "efficiency_agent")
+    graph.add_edge("prepare_input", "dead_code_agent")
+    graph.add_edge("prepare_input", "security_agent")
+
+    # Fan-In: Merge agent findings into aggregator
+    graph.add_edge("redundancy_agent", "aggregator")
+    graph.add_edge("efficiency_agent", "aggregator")
+    graph.add_edge("dead_code_agent", "aggregator")
+    graph.add_edge("security_agent", "aggregator")
+
+    # Linear pipeline: Aggregator -> Planner -> Patch Generator -> Apply Patch -> Verification
+    graph.add_edge("aggregator", "fix_planner")
+    graph.add_edge("fix_planner", "patch_generator")
+    graph.add_edge("patch_generator", "apply_patch")
+    graph.add_edge("apply_patch", "verification")
+
+    # Conditional Routing: If failed and retries remain, loop back to retry_patch_generator
+    graph.add_conditional_edges(
+        "verification",
+        route_verification,
+        {
+            "end": END,
+            "retry": "retry_patch_generator",
+        },
+    )
+    # Loop back to apply_patch after retry patch generation
+    graph.add_edge("retry_patch_generator", "apply_patch")
+
+    return graph.compile()
+
+
+def run_coderefine_workflow(
+    repo_path: str,
+    changed_files: List[str],
+    analysis_id: Optional[str] = None,
+    static_findings: Optional[List[Finding]] = None,
+    max_retries: int = 2,
+) -> dict:
+    """Helper to construct context, run static tools, and execute the compiled graph."""
+    run_id = analysis_id or f"run-{uuid.uuid4().hex[:8]}"
+
+    # Extract structured code context
+    code_context = build_context(repo_path, changed_files)
+
+    # Run deterministic static analysis if not already supplied
+    if static_findings is None:
+        try:
+            static_findings = run_static_analysis(repo_path, changed_files)
+        except Exception as e:
+            print(f"Static analysis failed: {e}. Proceeding with empty static findings.")
+            static_findings = []
+
+    initial_state: CodeRefineState = {
+        "analysis_id": run_id,
+        "repo_path": repo_path,
+        "changed_files": changed_files,
+        "code_context": code_context,
+        "static_findings": static_findings,
+        "ai_findings": [],
+        "aggregated_findings": [],
+        "quality_score": 0.0,
+        "fix_plan": [],
+        "generated_patches": [],
+        "combined_diff": "",
+        "verification_result": None,
+        "retry_count": 0,
+        "max_retries": max_retries,
+        "repair_feedback": None,
+        "repair_history": [],
+        "status": "initialized",
+    }
+
+    compiled_graph = build_graph()
+    final_state = compiled_graph.invoke(initial_state)
+    return final_state

@@ -1,32 +1,24 @@
-from app.analysis.ai_stub import analyze_file_with_ai
-from app.models.schemas import Finding
+from typing import List, Optional
+from app.models.schemas import ChangedFileContext, CodeContext, Finding
+from app.workflow.agents import generate_agent_findings
 
 
-def run_ai_analysis(changed_files_context, static_findings=None):
-    """TEMPORARY stand-in for Dev 2's AI agent service - runs each changed file through Gemini."""
+def run_ai_analysis(
+    changed_files_context: List[ChangedFileContext],
+    static_findings: Optional[List[Finding]] = None,
+) -> List[Finding]:
+    """Run all 4 AI agents across changed files context."""
     static_findings = static_findings or []
-    findings = []
+    code_context = CodeContext(changed_files=changed_files_context)
 
-    for file_ctx in changed_files_context:
-        file_static_findings = [f for f in static_findings if f.file_path == file_ctx.path]
+    agents = ["ai:redundancy", "ai:efficiency", "ai:dead_code", "ai:security"]
+    all_findings: List[Finding] = []
 
+    for agent_type in agents:
         try:
-            raw_items = analyze_file_with_ai(file_ctx.path, file_ctx.content, file_static_findings)
+            agent_findings = generate_agent_findings(agent_type, code_context, static_findings)
+            all_findings.extend(agent_findings)
         except Exception as exc:
-            print(f"AI analysis failed for {file_ctx.path}: {exc}")
-            continue
+            print(f"Agent {agent_type} failed: {exc}")
 
-        for item in raw_items:
-            category = item.get("category", "unknown")
-            findings.append(Finding(
-                agent_type=f"ai:{category}",
-                file_path=file_ctx.path,
-                start_line=item.get("start_line", 0),
-                end_line=item.get("end_line", 0),
-                category=category,
-                severity=item.get("severity", "low"),
-                title=item.get("title", ""),
-                description=item.get("description", ""),
-            ))
-
-    return findings
+    return all_findings
