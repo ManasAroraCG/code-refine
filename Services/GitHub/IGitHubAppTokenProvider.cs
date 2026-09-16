@@ -8,3 +8,4 @@ public interface IGitHubAppTokenProvider
 {
     Task<string> GetInstallationTokenAsync(CancellationToken cancellationToken = default);
 }
+ 

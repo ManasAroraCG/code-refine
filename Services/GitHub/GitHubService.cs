@@ -35,7 +35,9 @@ public class GitHubService : IGitHubService
     /// Lists repositories visible to the installation and mirrors them into the
     /// database so every repository has a stable internal identifier.
     /// </summary>
-    public async Task<IReadOnlyList<RepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default)
+
+    public async Task<IReadOnlyList<RepositoryDto>> GetRepositoriesAsync(
+    CancellationToken cancellationToken = default)
     {
         var client = await CreateClientAsync(cancellationToken);
 
@@ -43,99 +45,147 @@ public class GitHubService : IGitHubService
             () => client.GitHubApps.Installation.GetAllRepositoriesForCurrent(),
             "list installation repositories");
 
-        var tracked = await _dbContext.Repositories.ToListAsync(cancellationToken);
-        var results = new List<RepositoryDto>(response.Repositories.Count);
-
-        foreach (var remote in response.Repositories)
-        {
-            var owner = remote.Owner.Login;
-
-            var local = tracked.FirstOrDefault(r => r.Owner == owner && r.Name == remote.Name);
-
-            if (local is null)
+        return response.Repositories
+            .Select(repo => new RepositoryDto
             {
-                local = new Models.Repository
-                {
-                    Owner = owner,
-                    Name = remote.Name
-                };
-
-                _dbContext.Repositories.Add(local);
-            }
-
-            local.GitHubRepoId = remote.Id.ToString();
-            local.DefaultBranch = remote.DefaultBranch ?? "main";
-            local.IsPrivate = remote.Private;
-            local.InstallationId = _settings.InstallationId;
-
-            results.Add(MapToDto(local));
-        }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Synced {RepositoryCount} repositories from the GitHub App installation", results.Count);
-
-        return results;
+                GitHubRepoId = repo.Id.ToString(),
+                Owner = repo.Owner.Login,
+                Name = repo.Name,
+                FullName = repo.FullName,
+                DefaultBranch = repo.DefaultBranch,
+                IsPrivate = repo.Private,
+                CreatedAt = repo.CreatedAt.UtcDateTime
+            })
+            .ToList();
     }
-
-    public async Task<IReadOnlyList<BranchDto>> GetBranchesAsync(Guid repositoryId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<BranchDto>> GetBranchesAsync(
+     string githubRepoId,
+     CancellationToken cancellationToken = default)
     {
-        var repository = await GetTrackedRepositoryAsync(repositoryId, cancellationToken);
         var client = await CreateClientAsync(cancellationToken);
 
+        var response = await ExecuteAsync(
+            () => client.GitHubApps.Installation.GetAllRepositoriesForCurrent(),
+            "list installation repositories");
+
+        var repository = response.Repositories
+            .FirstOrDefault(r => r.Id.ToString() == githubRepoId);
+
+        if (repository == null)
+        {
+            throw new Exceptions.NotFoundException(
+                $"GitHub repository '{githubRepoId}' was not found.");
+        }
+
         var branches = await ExecuteAsync(
-            () => client.Repository.Branch.GetAll(repository.Owner, repository.Name),
-            $"list branches for repository {repositoryId}");
+            () => client.Repository.Branch.GetAll(
+                repository.Owner.Login,
+                repository.Name),
+            $"list branches for GitHub repository {githubRepoId}");
 
         return branches.Select(branch => new BranchDto
         {
             Name = branch.Name,
             CommitSha = branch.Commit?.Sha ?? string.Empty,
             IsProtected = branch.Protected,
-            IsDefault = string.Equals(branch.Name, repository.DefaultBranch, StringComparison.Ordinal)
+            IsDefault = string.Equals(
+                branch.Name,
+                repository.DefaultBranch,
+                StringComparison.Ordinal)
         }).ToList();
     }
 
     public async Task<IReadOnlyList<PullRequestDto>> GetPullRequestsAsync(
-        Guid repositoryId,
-        string state = "open",
-        CancellationToken cancellationToken = default)
+     string githubRepoId,
+     string state = "open",
+     CancellationToken cancellationToken = default)
     {
-        var repository = await GetTrackedRepositoryAsync(repositoryId, cancellationToken);
         var client = await CreateClientAsync(cancellationToken);
 
-        var request = new PullRequestRequest { State = ParseState(state) };
+        var response = await ExecuteAsync(
+            () => client.GitHubApps.Installation.GetAllRepositoriesForCurrent(),
+            "list installation repositories");
+
+        var repository = response.Repositories
+            .FirstOrDefault(r => r.Id.ToString() == githubRepoId);
+
+        if (repository == null)
+        {
+            throw new Exceptions.NotFoundException(
+                $"GitHub repository '{githubRepoId}' was not found.");
+        }
+
+        var request = new PullRequestRequest
+        {
+            State = ParseState(state)
+        };
 
         var pullRequests = await ExecuteAsync(
-            () => client.PullRequest.GetAllForRepository(repository.Owner, repository.Name, request),
-            $"list pull requests for repository {repositoryId}");
+            () => client.PullRequest.GetAllForRepository(
+                repository.Owner.Login,
+                repository.Name,
+                request),
+            $"list pull requests for GitHub repository {githubRepoId}");
 
         return pullRequests.Select(MapToDto).ToList();
     }
 
-    public async Task<PullRequestDto> GetPullRequestAsync(Guid repositoryId, int number, CancellationToken cancellationToken = default)
+    public async Task<PullRequestDto> GetPullRequestAsync(
+    string githubRepoId,
+    int number,
+    CancellationToken cancellationToken = default)
     {
-        var repository = await GetTrackedRepositoryAsync(repositoryId, cancellationToken);
         var client = await CreateClientAsync(cancellationToken);
 
+        var response = await ExecuteAsync(
+            () => client.GitHubApps.Installation.GetAllRepositoriesForCurrent(),
+            "list installation repositories");
+
+        var repository = response.Repositories
+            .FirstOrDefault(r => r.Id.ToString() == githubRepoId);
+
+        if (repository == null)
+        {
+            throw new Exceptions.NotFoundException(
+                $"GitHub repository '{githubRepoId}' was not found.");
+        }
+
         var pullRequest = await ExecuteAsync(
-            () => client.PullRequest.Get(repository.Owner, repository.Name, number),
-            $"get pull request #{number} for repository {repositoryId}");
+            () => client.PullRequest.Get(
+                repository.Owner.Login,
+                repository.Name,
+                number),
+            $"get pull request #{number} for GitHub repository {githubRepoId}");
 
         return MapToDto(pullRequest);
     }
 
     public async Task<IReadOnlyList<PullRequestFileDto>> GetPullRequestFilesAsync(
-        Guid repositoryId,
-        int number,
-        CancellationToken cancellationToken = default)
+    string githubRepoId,
+    int number,
+    CancellationToken cancellationToken = default)
     {
-        var repository = await GetTrackedRepositoryAsync(repositoryId, cancellationToken);
         var client = await CreateClientAsync(cancellationToken);
 
+        var response = await ExecuteAsync(
+            () => client.GitHubApps.Installation.GetAllRepositoriesForCurrent(),
+            "list installation repositories");
+
+        var repository = response.Repositories
+            .FirstOrDefault(r => r.Id.ToString() == githubRepoId);
+
+        if (repository == null)
+        {
+            throw new Exceptions.NotFoundException(
+                $"GitHub repository '{githubRepoId}' was not found.");
+        }
+
         var files = await ExecuteAsync(
-            () => client.PullRequest.Files(repository.Owner, repository.Name, number),
-            $"list files for pull request #{number} in repository {repositoryId}");
+            () => client.PullRequest.Files(
+                repository.Owner.Login,
+                repository.Name,
+                number),
+            $"list files for pull request #{number} in GitHub repository {githubRepoId}");
 
         return files.Select(file => new PullRequestFileDto
         {
@@ -216,7 +266,8 @@ public class GitHubService : IGitHubService
 
     private static RepositoryDto MapToDto(Models.Repository repository) => new()
     {
-        Id = repository.Id,
+   
+        GitHubRepoId = repository.GitHubRepoId,
         Owner = repository.Owner,
         Name = repository.Name,
         FullName = repository.FullName,
