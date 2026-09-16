@@ -26,16 +26,23 @@ public class AnalysisService : IAnalysisService
         _logger = logger;
     }
 
-    public async Task<AnalysisResponse> StartAnalysisAsync(StartAnalysisRequest request, CancellationToken cancellationToken = default)
+    public async Task<AnalysisResponse> StartAnalysisAsync(
+     StartAnalysisRequest request,
+     CancellationToken cancellationToken = default)
     {
-        if (request.PullRequestNumber is null && string.IsNullOrWhiteSpace(request.Branch))
+        if (request.PullRequestNumber is null &&
+            string.IsNullOrWhiteSpace(request.Branch))
         {
-            throw new ValidationException("Either a pull request number or a branch must be supplied.");
+            throw new ValidationException(
+                "Either a pull request number or a branch must be supplied.");
         }
 
         var repository = await _dbContext.Repositories
-            .FirstOrDefaultAsync(r => r.Id == request.RepositoryId, cancellationToken)
-            ?? throw new NotFoundException($"Repository '{request.RepositoryId}' was not found.");
+            .FirstOrDefaultAsync(
+                r => r.Id == request.RepositoryId,
+                cancellationToken)
+            ?? throw new NotFoundException(
+                $"Repository '{request.RepositoryId}' was not found.");
 
         var run = new AnalysisRun
         {
@@ -48,7 +55,11 @@ public class AnalysisService : IAnalysisService
 
         if (request.PullRequestNumber is int prNumber)
         {
-            var pullRequest = await _gitHubService.GetPullRequestAsync(repository.Id, prNumber, cancellationToken);
+            var pullRequest = await _gitHubService.GetPullRequestAsync(
+                repository.GitHubRepoId,
+                prNumber,
+                cancellationToken);
+
             run.SourceBranch = pullRequest.HeadBranch;
             run.TargetBranch = pullRequest.BaseBranch;
             run.CommitSha = pullRequest.HeadSha;
@@ -59,11 +70,13 @@ public class AnalysisService : IAnalysisService
 
         _logger.LogInformation(
             "Analysis {AnalysisId} started for repository {RepositoryId} (PR {PullRequestNumber}, branch {SourceBranch})",
-            run.Id, repository.Id, run.PullRequestNumber, run.SourceBranch);
+            run.Id,
+            repository.Id,
+            run.PullRequestNumber,
+            run.SourceBranch);
 
         return MapToResponse(run, repository);
     }
-
     public async Task<AnalysisResponse> GetAnalysisAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
     {
         var run = await _dbContext.AnalysisRuns
