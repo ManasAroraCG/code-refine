@@ -1,28 +1,34 @@
-using CodeRefine.Api.Data;
+using CodeRefine.Api.DTOs.AiService;
 using CodeRefine.Api.DTOs.Analysis;
 using CodeRefine.Api.DTOs.GitHub;
 using CodeRefine.Api.DTOs.Review;
 using CodeRefine.Api.Enums;
 using CodeRefine.Api.Exceptions;
 using CodeRefine.Api.Models;
+using CodeRefine.Api.Services.AI;
 using CodeRefine.Api.Services.GitHub;
-using Microsoft.EntityFrameworkCore;
 
 namespace CodeRefine.Api.Services.Analysis;
 
 public class AnalysisService : IAnalysisService
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IAnalysisRunStore _runStore;
     private readonly IGitHubService _gitHubService;
+    private readonly IGitHubAppTokenProvider _gitHubAppTokenProvider;
+    private readonly IAiService _aiService;
     private readonly ILogger<AnalysisService> _logger;
 
     public AnalysisService(
-        AppDbContext dbContext,
+        IAnalysisRunStore runStore,
         IGitHubService gitHubService,
+        IGitHubAppTokenProvider gitHubAppTokenProvider,
+        IAiService aiService,
         ILogger<AnalysisService> logger)
     {
-        _dbContext = dbContext;
+        _runStore = runStore;
         _gitHubService = gitHubService;
+        _gitHubAppTokenProvider = gitHubAppTokenProvider;
+        _aiService = aiService;
         _logger = logger;
     }
 
@@ -37,16 +43,26 @@ public class AnalysisService : IAnalysisService
                 "Either a pull request number or a branch must be supplied.");
         }
 
-        var repository = await _dbContext.Repositories
-            .FirstOrDefaultAsync(
-                r => r.Id == request.RepositoryId,
-                cancellationToken)
-            ?? throw new NotFoundException(
-                $"Repository '{request.RepositoryId}' was not found.");
+        // Repositories are resolved live from the GitHub App installation list;
+        // nothing about an analysis run touches Postgres.
+        var repositories = await _gitHubService.GetRepositoriesAsync(cancellationToken);
+        var repositoryDto = repositories.FirstOrDefault(r => r.Id == request.RepositoryId)
+            ?? throw new NotFoundException($"Repository '{request.RepositoryId}' was not found.");
+
+        var repository = new Models.Repository
+        {
+            Id = repositoryDto.Id,
+            GitHubRepoId = repositoryDto.GitHubRepoId,
+            Owner = repositoryDto.Owner,
+            Name = repositoryDto.Name,
+            DefaultBranch = repositoryDto.DefaultBranch,
+            IsPrivate = repositoryDto.IsPrivate
+        };
 
         var run = new AnalysisRun
         {
             RepositoryId = repository.Id,
+            Repository = repository,
             PullRequestNumber = request.PullRequestNumber,
             SourceBranch = request.Branch,
             TargetBranch = repository.DefaultBranch,
@@ -65,8 +81,7 @@ public class AnalysisService : IAnalysisService
             run.CommitSha = pullRequest.HeadSha;
         }
 
-        _dbContext.AnalysisRuns.Add(run);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        _runStore.Save(run);
 
         _logger.LogInformation(
             "Analysis {AnalysisId} started for repository {RepositoryId} (PR {PullRequestNumber}, branch {SourceBranch})",
@@ -75,58 +90,223 @@ public class AnalysisService : IAnalysisService
             run.PullRequestNumber,
             run.SourceBranch);
 
-        return MapToResponse(run, repository);
-    }
-    public async Task<AnalysisResponse> GetAnalysisAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
-    {
-        var run = await _dbContext.AnalysisRuns
-            .Include(r => r.Repository)
-            .Include(r => r.Findings).ThenInclude(f => f.Patches)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == analysisRunId, cancellationToken)
-            ?? throw new NotFoundException($"Analysis '{analysisRunId}' was not found.");
+        await RunWorkflowAsync(run, repository, cancellationToken);
 
-        return MapToResponse(run, run.Repository, includeFindings: true);
+        return MapToResponse(run, repository, includeFindings: true);
     }
 
-    public async Task<IReadOnlyList<FindingDto>> GetFindingsAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Synchronously drives the engine: create a workspace, run the full
+    /// LangGraph workflow, then persist findings/patches/verification results.
+    /// Failures are recorded on the run rather than thrown, so the caller
+    /// always gets back the (possibly Failed) analysis.
+    /// </summary>
+    private async Task RunWorkflowAsync(AnalysisRun run, Models.Repository repository, CancellationToken cancellationToken)
     {
-        await EnsureAnalysisExistsAsync(analysisRunId, cancellationToken);
+        run.Status = AnalysisStatus.Analyzing;
+        _runStore.Save(run);
 
-        var findings = await _dbContext.Findings
-            .Include(f => f.Patches)
-            .Where(f => f.AnalysisRunId == analysisRunId)
+        try
+        {
+            var repoUrl = await BuildCloneUrlAsync(repository, cancellationToken);
+
+            var workspace = await _aiService.CreateWorkspaceAsync(new WorkspaceRequest
+            {
+                RepoUrl = repoUrl,
+                Branch = run.PullRequestNumber is null ? run.SourceBranch : null,
+                PrNumber = run.PullRequestNumber,
+                BaseBranch = run.TargetBranch
+            }, cancellationToken);
+
+            var workflowResult = await _aiService.RunWorkflowAsync(new WorkflowRequest
+            {
+                AnalysisId = run.Id.ToString(),
+                RepoPath = workspace.RepoPath,
+                ChangedFiles = workspace.ChangedFiles,
+                Language = "python"
+            }, cancellationToken);
+
+            ApplyWorkflowResult(run, workflowResult);
+
+            run.Status = AnalysisStatus.ReadyForReview;
+        }
+        catch (AiServiceException ex)
+        {
+            _logger.LogError(ex, "Analysis {AnalysisId} failed while calling the analysis engine", run.Id);
+            run.Status = AnalysisStatus.Failed;
+            run.ErrorMessage = ex.Message;
+            run.CompletedAt = DateTime.UtcNow;
+        }
+
+        _runStore.Save(run);
+    }
+
+    /// <summary>Builds an HTTPS clone URL, embedding a GitHub App installation token for private repos.</summary>
+    private async Task<string> BuildCloneUrlAsync(Models.Repository repository, CancellationToken cancellationToken)
+    {
+        if (!repository.IsPrivate)
+        {
+            return $"https://github.com/{repository.Owner}/{repository.Name}.git";
+        }
+
+        var token = await _gitHubAppTokenProvider.GetInstallationTokenAsync(cancellationToken);
+        return $"https://x-access-token:{token}@github.com/{repository.Owner}/{repository.Name}.git";
+    }
+
+    /// <summary>Maps the engine's workflow output onto Finding/Patch/VerificationResult rows for this run.</summary>
+    private static void ApplyWorkflowResult(AnalysisRun run, WorkflowResponse workflowResult)
+    {
+        run.QualityScoreBefore = workflowResult.QualityScore;
+
+        var findingsByFile = new Dictionary<string, List<Finding>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var dto in workflowResult.Findings)
+        {
+            var filePath = dto.FilePath ?? dto.File;
+
+            var finding = new Finding
+            {
+                Id = Guid.NewGuid(),
+                AnalysisRunId = run.Id,
+                AgentType = dto.AgentType,
+                FilePath = filePath,
+                StartLine = dto.StartLine,
+                EndLine = dto.EndLine,
+                Category = dto.Category,
+                Severity = ParseEnum(dto.Severity, FindingSeverity.Low),
+                Title = dto.Title,
+                Description = dto.Description,
+                Recommendation = dto.Recommendation,
+                Confidence = dto.Confidence,
+                Status = FindingStatus.Open,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            run.Findings.Add(finding);
+
+            if (!findingsByFile.TryGetValue(filePath, out var list))
+            {
+                findingsByFile[filePath] = list = new List<Finding>();
+            }
+
+            list.Add(finding);
+        }
+
+        // The engine generates one patch per file (covering every finding in
+        // that file), while the backend schema requires a FindingId per patch.
+        // Fan the patch out to every finding detected in the same file.
+        var verdict = workflowResult.VerificationResult?.Verdict;
+        var patchStatus = verdict switch
+        {
+            "passed" => PatchStatus.Verified,
+            "failed" => PatchStatus.VerificationFailed,
+            _ => PatchStatus.Proposed
+        };
+
+        foreach (var patchDto in workflowResult.GeneratedPatches)
+        {
+            if (!findingsByFile.TryGetValue(patchDto.FilePath, out var findingsForFile))
+            {
+                continue;
+            }
+
+            foreach (var finding in findingsForFile)
+            {
+                finding.Status = FindingStatus.PatchProposed;
+
+                finding.Patches.Add(new Patch
+                {
+                    Id = Guid.NewGuid(),
+                    FindingId = finding.Id,
+                    FilePath = patchDto.FilePath,
+                    OriginalCode = patchDto.OriginalCode,
+                    ProposedCode = patchDto.ProposedCode,
+                    Diff = patchDto.Diff,
+                    Explanation = patchDto.Explanation,
+                    Status = patchStatus,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        if (workflowResult.VerificationResult is not null)
+        {
+            foreach (var check in workflowResult.VerificationResult.Checks)
+            {
+                if (!TryParseCheckType(check.CheckType, out var checkType))
+                {
+                    continue;
+                }
+
+                run.VerificationResults.Add(new VerificationResult
+                {
+                    Id = Guid.NewGuid(),
+                    AnalysisRunId = run.Id,
+                    CheckType = checkType,
+                    Status = ParseEnum(check.Status, Enums.VerificationStatus.Error),
+                    Output = check.Output,
+                    DurationMs = check.DurationMs,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+    }
+
+    private static bool TryParseCheckType(string checkType, out VerificationCheckType result)
+        => Enum.TryParse(ToPascalCase(checkType), ignoreCase: true, out result);
+
+    private static TEnum ParseEnum<TEnum>(string value, TEnum fallback) where TEnum : struct, Enum
+        => Enum.TryParse<TEnum>(ToPascalCase(value), ignoreCase: true, out var parsed) ? parsed : fallback;
+
+    private static string ToPascalCase(string snakeCaseValue)
+    {
+        if (string.IsNullOrWhiteSpace(snakeCaseValue))
+        {
+            return string.Empty;
+        }
+
+        var parts = snakeCaseValue.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant()));
+    }
+
+    public Task<AnalysisResponse> GetAnalysisAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
+    {
+        var run = FindRunOrThrow(analysisRunId);
+        return Task.FromResult(MapToResponse(run, run.Repository, includeFindings: true));
+    }
+
+    public Task<IReadOnlyList<FindingDto>> GetFindingsAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
+    {
+        var run = FindRunOrThrow(analysisRunId);
+        IReadOnlyList<FindingDto> findings = run.Findings
             .OrderByDescending(f => f.Severity)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+            .Select(MapToDto)
+            .ToList();
 
-        return findings.Select(MapToDto).ToList();
+        return Task.FromResult(findings);
     }
 
-    public async Task<IReadOnlyList<PatchDto>> GetPatchesAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<PatchDto>> GetPatchesAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
     {
-        await EnsureAnalysisExistsAsync(analysisRunId, cancellationToken);
-
-        var patches = await _dbContext.Patches
-            .Where(p => p.Finding!.AnalysisRunId == analysisRunId)
+        var run = FindRunOrThrow(analysisRunId);
+        IReadOnlyList<PatchDto> patches = run.Findings
+            .SelectMany(f => f.Patches)
             .OrderBy(p => p.CreatedAt)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+            .Select(MapToDto)
+            .ToList();
 
-        return patches.Select(MapToDto).ToList();
+        return Task.FromResult(patches);
     }
 
-    public async Task<IReadOnlyList<VerificationDto>> GetVerificationAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<VerificationDto>> GetVerificationAsync(Guid analysisRunId, CancellationToken cancellationToken = default)
     {
-        await EnsureAnalysisExistsAsync(analysisRunId, cancellationToken);
-
-        var results = await _dbContext.VerificationResults
-            .Where(v => v.AnalysisRunId == analysisRunId)
+        var run = FindRunOrThrow(analysisRunId);
+        IReadOnlyList<VerificationDto> results = run.VerificationResults
             .OrderBy(v => v.CheckType)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+            .Select(MapToDto)
+            .ToList();
 
-        return results.Select(MapToDto).ToList();
+        return Task.FromResult(results);
     }
 
     public Task<AnalysisResponse> ApproveAsync(Guid analysisRunId, ReviewRequest request, CancellationToken cancellationToken = default)
@@ -142,26 +322,26 @@ public class AnalysisService : IAnalysisService
         throw new NotImplementedException("Improvement pull request delivery is implemented in Step 6.");
     }
 
-    private async Task<AnalysisResponse> RecordDecisionAsync(
+    private Task<AnalysisResponse> RecordDecisionAsync(
         Guid analysisRunId,
         ReviewRequest request,
         ReviewDecision decision,
         CancellationToken cancellationToken)
     {
-        var run = await _dbContext.AnalysisRuns
-            .Include(r => r.Repository)
-            .FirstOrDefaultAsync(r => r.Id == analysisRunId, cancellationToken)
-            ?? throw new NotFoundException($"Analysis '{analysisRunId}' was not found.");
+        var run = FindRunOrThrow(analysisRunId);
 
         if (run.Status != AnalysisStatus.ReadyForReview)
         {
             throw new InvalidStateException($"Analysis is '{run.Status}' and cannot be reviewed. Expected 'ReadyForReview'.");
         }
 
-        await ValidateReviewTargetsAsync(analysisRunId, request, cancellationToken);
+        ValidateReviewTargets(run, request);
 
         var reviews = BuildReviews(analysisRunId, request, decision);
-        _dbContext.Reviews.AddRange(reviews);
+        foreach (var review in reviews)
+        {
+            run.Reviews.Add(review);
+        }
 
         run.Status = decision == ReviewDecision.Approved ? AnalysisStatus.Approved : AnalysisStatus.Rejected;
 
@@ -170,20 +350,19 @@ public class AnalysisService : IAnalysisService
             run.CompletedAt = DateTime.UtcNow;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        _runStore.Save(run);
 
         _logger.LogInformation("Human {Decision} recorded for analysis {AnalysisId} ({ReviewCount} review records)",
             decision, analysisRunId, reviews.Count);
 
-        return MapToResponse(run, run.Repository);
+        return Task.FromResult(MapToResponse(run, run.Repository));
     }
 
-    private async Task ValidateReviewTargetsAsync(Guid analysisRunId, ReviewRequest request, CancellationToken cancellationToken)
+    private static void ValidateReviewTargets(AnalysisRun run, ReviewRequest request)
     {
         if (request.FindingIds.Count > 0)
         {
-            var validFindings = await _dbContext.Findings
-                .CountAsync(f => f.AnalysisRunId == analysisRunId && request.FindingIds.Contains(f.Id), cancellationToken);
+            var validFindings = run.Findings.Count(f => request.FindingIds.Contains(f.Id));
 
             if (validFindings != request.FindingIds.Count)
             {
@@ -193,8 +372,7 @@ public class AnalysisService : IAnalysisService
 
         if (request.PatchIds.Count > 0)
         {
-            var validPatches = await _dbContext.Patches
-                .CountAsync(p => p.Finding!.AnalysisRunId == analysisRunId && request.PatchIds.Contains(p.Id), cancellationToken);
+            var validPatches = run.Findings.SelectMany(f => f.Patches).Count(p => request.PatchIds.Contains(p.Id));
 
             if (validPatches != request.PatchIds.Count)
             {
@@ -242,15 +420,8 @@ public class AnalysisService : IAnalysisService
         return reviews;
     }
 
-    private async Task EnsureAnalysisExistsAsync(Guid analysisRunId, CancellationToken cancellationToken)
-    {
-        var exists = await _dbContext.AnalysisRuns.AnyAsync(r => r.Id == analysisRunId, cancellationToken);
-
-        if (!exists)
-        {
-            throw new NotFoundException($"Analysis '{analysisRunId}' was not found.");
-        }
-    }
+    private AnalysisRun FindRunOrThrow(Guid analysisRunId) =>
+        _runStore.Find(analysisRunId) ?? throw new NotFoundException($"Analysis '{analysisRunId}' was not found.");
 
     private static AnalysisResponse MapToResponse(AnalysisRun run, Models.Repository? repository, bool includeFindings = false) => new()
     {
