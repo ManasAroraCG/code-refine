@@ -2,7 +2,7 @@ import json
 import re
 from typing import List
 from app.models.schemas import CodeContext, Finding
-from app.workflow.llm import get_llm
+from app.workflow.llm import invoke_llm
 from app.workflow.state import CodeRefineState
 
 
@@ -154,7 +154,7 @@ def parse_agent_response(raw_text: str) -> List[Finding]:
         try:
             data = json.loads(slice_text)
             if isinstance(data, list):
-                return [Finding.model_validate(item) for item in data if isinstance(item, dict)]
+                return [normalize_llm_finding(item) for item in data if isinstance(item, dict)]
         except Exception:
             pass
 
@@ -167,8 +167,8 @@ def parse_agent_response(raw_text: str) -> List[Finding]:
             data = json.loads(slice_obj)
             if isinstance(data, dict):
                 if "findings" in data and isinstance(data["findings"], list):
-                    return [Finding.model_validate(item) for item in data["findings"] if isinstance(item, dict)]
-                return [Finding.model_validate(data)]
+                    return [normalize_llm_finding(item) for item in data["findings"] if isinstance(item, dict)]
+                return [normalize_llm_finding(data)]
         except Exception:
             pass
 
@@ -178,7 +178,7 @@ def parse_agent_response(raw_text: str) -> List[Finding]:
     for obj_match in object_pattern.finditer(text):
         try:
             item_dict = json.loads(obj_match.group(0))
-            recovered_findings.append(Finding.model_validate(item_dict))
+            recovered_findings.append(normalize_llm_finding(item_dict))
         except Exception:
             continue
 
@@ -186,6 +186,31 @@ def parse_agent_response(raw_text: str) -> List[Finding]:
         return recovered_findings
 
     raise ValueError(f"Could not parse valid JSON from response: {text[:200]}")
+
+
+def normalize_llm_finding(item: dict) -> Finding:
+    """Coerce common Groq JSON shapes into the CodeRefine Finding schema."""
+    data = dict(item)
+    location = str(data.get("location") or data.get("loc") or "")
+    location_match = re.search(r"([^:\s]+\.\w+)\D+(\d+)(?:\D+(\d+))?", location)
+    if location_match:
+        data.setdefault("file", location_match.group(1))
+        data.setdefault("start_line", int(location_match.group(2)))
+        data.setdefault("end_line", int(location_match.group(3) or location_match.group(2)))
+
+    category = data.get("category") or data.get("type") or "quality"
+    description = data.get("description") or data.get("details") or data.get("issue") or ""
+    recommendation = data.get("recommendation") or data.get("suggestion") or data.get("fix") or ""
+    title = data.get("title") or str(category).replace("_", " ").title()
+
+    data["category"] = category
+    data["description"] = description
+    data["recommendation"] = recommendation
+    data["title"] = title
+    data.setdefault("severity", "medium")
+    data.setdefault("confidence", 0.80)
+    data.setdefault("fix_available", True)
+    return Finding.model_validate(data)
 
 
 def generate_agent_findings(
@@ -213,46 +238,28 @@ def generate_agent_findings(
 
     role_desc = AGENT_DESCRIPTIONS.get(agent_type, "code quality analysis agent")
     prompt = (
-        f"You are the {agent_type} ({role_desc}) in the CodeRefine automated code quality review system.\n"
-        "Your task is to identify high-quality, actionable code quality issues in the provided code that static linters missed.\n\n"
-        "RULES:\n"
-        "1. Return ONLY a valid JSON array of objects with the exact schema below.\n"
-        "2. Do NOT output markdown code blocks (```json), explanations, or preamble.\n"
-        "3. 'confidence' MUST be a numeric float between 0.0 and 1.0 (e.g. 0.95), NEVER a string like 'high'.\n"
-        "4. 'severity' must be one of: 'low', 'medium', 'high', 'critical'.\n"
-        "5. 'start_line' and 'end_line' must be integers.\n\n"
-        "EXAMPLE OUTPUT:\n"
-        "[\n"
-        "  {\n"
-        f'    "agent_type": "{agent_type}",\n'
-        '    "category": "redundancy",\n'
-        '    "severity": "medium",\n'
-        '    "file": "sample.py",\n'
-        '    "start_line": 1,\n'
-        '    "end_line": 13,\n'
-        '    "title": "Duplicate logic",\n'
-        '    "description": "Functions perform the identical task.",\n'
-        '    "recommendation": "Consolidate into a single function.",\n'
-        '    "confidence": 0.90,\n'
-        '    "fix_available": true\n'
-        "  }\n"
-        "]\n\n"
-        f"STATIC ANALYSIS FINDINGS (Already caught - DO NOT duplicate):\n{static_prompt}\n\n"
-        f"CODE TO ANALYZE:\n{file_text}\n"
+        f"You are {agent_type}, a {role_desc}\n"
+        "Analyze the changed code and return only a JSON array. No markdown, no prose.\n"
+        "Use these fields when possible: category, severity, file, start_line, end_line, title, description, recommendation, confidence, fix_available.\n"
+        "If no issue exists, return [].\n\n"
+        f"Static findings from deterministic tools:\n{static_prompt}\n\n"
+        f"Changed code:\n{file_text}\n"
     )
 
-    llm = get_llm()
-    if llm:
-        try:
-            response = llm.invoke(prompt)
+    try:
+        response = invoke_llm(prompt, agent_type)
+        if response:
             content_str = response.content if hasattr(response, "content") else str(response)
             findings = parse_agent_response(content_str)
             if findings:
                 for f in findings:
                     f.agent_type = agent_type
+                    if not f.file and code_context.changed_files:
+                        f.file = code_context.changed_files[0].path
+                        f.file_path = f.file
                 return findings
-        except Exception as e:
-            print(f"[{agent_type}] LLM invocation failed: {e}. Using heuristics.")
+    except Exception as e:
+        print(f"[{agent_type}] LLM invocation failed: {e}. Using heuristics.")
 
     # Fallback to heuristics per file
     all_heuristics: List[Finding] = []

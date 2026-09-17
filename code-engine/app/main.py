@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from app.api.routes import router as workspace_router
 
 app = FastAPI()
-app.include_router(workspace_router)
+app.router.routes.extend(workspace_router.routes)
 
 
 @app.get("/")

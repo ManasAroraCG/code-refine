@@ -102,9 +102,10 @@ def analyze(request: AnalyzeRequest):
     )
 
 
+@router.post("/workspace/run", response_model=WorkflowResponse)
 @router.post("/workflow/run", response_model=WorkflowResponse)
 def run_workflow_endpoint(request: AnalyzeRequest):
-    """Run full LangGraph workflow and return complete state including fix plan, patches, verification, and repair history."""
+    """Run full LangGraph workflow and return complete state including fix plan, patches, verification, repair history, and improvement PR URL."""
     repo_path = request.repo_path or request.repository_path or ""
     changed_files = request.changed_files or []
     analysis_id = request.analysis_id or "analysis-full-run"
@@ -113,6 +114,9 @@ def run_workflow_endpoint(request: AnalyzeRequest):
         repo_path=repo_path,
         changed_files=changed_files,
         analysis_id=analysis_id,
+        repo_url=request.repo_url or "",
+        pr_number=request.pr_number,
+        base_branch=request.base_branch,
     )
 
     return WorkflowResponse(
@@ -126,6 +130,8 @@ def run_workflow_endpoint(request: AnalyzeRequest):
         verification_result=final_state.get("verification_result"),
         retry_count=final_state.get("retry_count", 0),
         repair_history=final_state.get("repair_history", []),
+        improvement_branch=final_state.get("improvement_branch"),
+        improvement_pr_url=final_state.get("improvement_pr_url"),
     )
 
 
