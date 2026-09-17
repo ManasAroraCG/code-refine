@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowRight,
   Check,
   ChevronRight,
@@ -566,6 +567,8 @@ function HowItWorks() {
 const GITHUB_ACCOUNT_NAME = 'Arth-CGI';
 const getGitHubRepositoryId = (repository) => repository?.gitHubRepoId || repository?.githubRepoId || repository?.GitHubRepoId;
 const getRepositoryKey = (repository) => getGitHubRepositoryId(repository) || repository?.id || repository?.name;
+const getBranchName = (branch) => branch?.name || branch?.Name;
+const getBranchIsDefault = (branch) => branch?.isDefault || branch?.IsDefault;
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -576,6 +579,7 @@ export default function Home() {
   const [connectedRepositoryId, setConnectedRepositoryId] = useState('');
   const [selectedRepository, setSelectedRepository] = useState(null);
   const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState('');
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [pullRequests, setPullRequests] = useState([]);
   const [pullRequestsLoading, setPullRequestsLoading] = useState(false);
@@ -626,6 +630,23 @@ export default function Home() {
     await handleSelectRepository(repository);
   };
 
+  const handleChooseAnotherRepository = () => {
+    setConnectedRepositoryId('');
+    setSelectedRepository(null);
+    setBranches([]);
+    setSelectedBranch('');
+    setPullRequests([]);
+    setSelectedPullRequest(null);
+    setPullRequestFiles([]);
+    setRepoPanelError('');
+  };
+
+  const handleSelectBranch = (branchName) => {
+    setSelectedBranch(branchName);
+    setSelectedPullRequest(null);
+    setPullRequestFiles([]);
+  };
+
   const handleSelectRepository = async (repository) => {
     const gitHubRepositoryId = getGitHubRepositoryId(repository);
 
@@ -638,6 +659,7 @@ export default function Home() {
     setSelectedPullRequest(null);
     setPullRequestFiles([]);
     setBranches([]);
+    setSelectedBranch('');
     setPullRequests([]);
     setRepoPanelError('');
     setBranchesLoading(true);
@@ -647,7 +669,10 @@ export default function Home() {
         codeRefineService.getBranches(gitHubRepositoryId),
         codeRefineService.getPullRequests(gitHubRepositoryId, 'open'),
       ]);
-      setBranches(Array.isArray(branchList) ? branchList : []);
+      const availableBranches = Array.isArray(branchList) ? branchList : [];
+      const defaultBranch = availableBranches.find((branch) => getBranchIsDefault(branch)) || availableBranches[0];
+      setBranches(availableBranches);
+      setSelectedBranch(getBranchName(defaultBranch) || '');
       setPullRequests(Array.isArray(prList) ? prList : []);
     } catch (error) {
       setRepoPanelError(error.response?.data?.detail || error.message || 'Unable to load repository details.');
@@ -679,6 +704,10 @@ export default function Home() {
       setFilesLoading(false);
     }
   };
+
+  const visiblePullRequests = selectedBranch
+    ? pullRequests.filter((pullRequest) => pullRequest.headBranch === selectedBranch || pullRequest.baseBranch === selectedBranch)
+    : pullRequests;
 
   return (
     <main className="min-h-screen overflow-hidden bg-white text-slate-950">
@@ -856,22 +885,32 @@ export default function Home() {
       {connected && selectedRepository && (
         <section id="repository-detail" className="px-5 py-20 lg:px-8">
           <div className="mx-auto max-w-7xl">
-            <div>
-              <p className="text-sm font-semibold text-blue-600">Repository detail</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                {selectedRepository.fullName || selectedRepository.name}
-              </h2>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
-                Select an open pull request to examine its file changes.
-              </p>
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+              <div>
+                <p className="text-sm font-semibold text-blue-600">Connected repository</p>
+                <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+                  {selectedRepository.fullName || selectedRepository.name}
+                </h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
+                  Choose a branch, select an open pull request, then examine its file changes.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleChooseAnotherRepository}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition-transform duration-200 hover:-translate-y-0.5 hover:bg-slate-100"
+              >
+                <ArrowLeft className="size-4" /> Choose another repo
+              </button>
             </div>
 
             {repoPanelError && <p className="mt-6 text-sm text-rose-600">{repoPanelError}</p>}
 
             <div className="mt-10 grid gap-6 lg:grid-cols-[.85fr_1.15fr]">
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                <h3 className="flex items-center gap-2 font-semibold text-slate-900">
-                  <GitBranch className="size-4 text-blue-600" /> Branches
+                <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600">Step 1</p>
+                <h3 className="mt-2 flex items-center gap-2 font-semibold text-slate-900">
+                  <GitBranch className="size-4 text-blue-600" /> Select branch
                 </h3>
                 {branchesLoading ? (
                   <p className="mt-4 text-sm text-slate-500">Loading branches…</p>
@@ -879,30 +918,40 @@ export default function Home() {
                   <p className="mt-4 text-sm text-slate-500">No branches found.</p>
                 ) : (
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {branches.map((branch) => (
-                      <span
-                        key={branch.name}
-                        className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                          branch.isDefault ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {branch.name}
-                        {branch.isDefault ? ' · default' : ''}
-                      </span>
-                    ))}
+                    {branches.map((branch) => {
+                      const branchName = getBranchName(branch);
+                      const isBranchSelected = selectedBranch === branchName;
+                      return (
+                        <button
+                          key={branchName}
+                          type="button"
+                          onClick={() => handleSelectBranch(branchName)}
+                          className={`rounded-full border px-3 py-1 text-xs font-medium transition-transform duration-200 hover:-translate-y-0.5 ${
+                            isBranchSelected
+                              ? 'border-blue-300 bg-blue-600 text-white shadow-sm'
+                              : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {branchName}
+                          {getBranchIsDefault(branch) ? ' · default' : ''}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
-                <h3 className="mt-8 flex items-center gap-2 font-semibold text-slate-900">
-                  <GitPullRequest className="size-4 text-blue-600" /> Open pull requests
+                <p className="mt-8 text-xs font-semibold uppercase tracking-[.16em] text-blue-600">Step 2</p>
+                <h3 className="mt-2 flex items-center gap-2 font-semibold text-slate-900">
+                  <GitPullRequest className="size-4 text-blue-600" /> Select open PR
                 </h3>
+                {selectedBranch && <p className="mt-2 text-xs text-slate-500">Showing PRs for {selectedBranch}. Pick another branch above to change this list.</p>}
                 {pullRequestsLoading ? (
                   <p className="mt-4 text-sm text-slate-500">Loading pull requests…</p>
-                ) : pullRequests.length === 0 ? (
-                  <p className="mt-4 text-sm text-slate-500">No open pull requests.</p>
+                ) : visiblePullRequests.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">No open pull requests for this branch.</p>
                 ) : (
                   <div className="mt-4 flex flex-col gap-2">
-                    {pullRequests.map((pullRequest) => {
+                    {visiblePullRequests.map((pullRequest) => {
                       const isPrSelected = selectedPullRequest?.number === pullRequest.number;
                       return (
                         <button
@@ -925,7 +974,8 @@ export default function Home() {
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                <h3 className="font-semibold text-slate-900">File changes</h3>
+                <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600">Step 3</p>
+                <h3 className="mt-2 font-semibold text-slate-900">Examine file changes</h3>
                 {!selectedPullRequest ? (
                   <p className="mt-4 text-sm text-slate-500">Select a pull request to view its file changes.</p>
                 ) : filesLoading ? (
