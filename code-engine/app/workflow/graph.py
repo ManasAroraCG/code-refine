@@ -14,6 +14,7 @@ from app.workflow.agents import (
 from app.workflow.aggregator import aggregator_node
 from app.workflow.patcher import apply_patch_node, patch_generator_node
 from app.workflow.planner import fix_planner_node
+from app.workflow.pr_publisher import commit_and_push_node, create_pr_node
 from app.workflow.repair import retry_patch_generator_node
 from app.workflow.state import CodeRefineState
 from app.workflow.verifier import route_verification, verification_node
@@ -24,6 +25,9 @@ def prepare_input_node(state: CodeRefineState) -> dict:
     return {
         "analysis_id": state.get("analysis_id") or f"run-{uuid.uuid4().hex[:8]}",
         "repo_path": state.get("repo_path", ""),
+        "repo_url": state.get("repo_url", ""),
+        "pr_number": state.get("pr_number"),
+        "base_branch": state.get("base_branch"),
         "changed_files": state.get("changed_files", []),
         "code_context": state.get("code_context") or CodeContext(),
         "static_findings": state.get("static_findings", []),
@@ -38,6 +42,8 @@ def prepare_input_node(state: CodeRefineState) -> dict:
         "max_retries": state.get("max_retries", 2),
         "repair_feedback": None,
         "repair_history": [],
+        "improvement_branch": None,
+        "improvement_pr_url": None,
         "status": "prepared",
     }
 
@@ -58,20 +64,17 @@ def build_graph():
     graph.add_node("apply_patch", apply_patch_node)
     graph.add_node("verification", verification_node)
     graph.add_node("retry_patch_generator", retry_patch_generator_node)
+    graph.add_node("commit_and_push", commit_and_push_node)
+    graph.add_node("create_pr", create_pr_node)
 
     # Entry to input preparation
     graph.add_edge(START, "prepare_input")
 
-    # Fan-Out: Parallel execution of the 4 specialized AI agents
+    # Run specialized AI agents sequentially to avoid bursting through Groq TPM limits.
     graph.add_edge("prepare_input", "redundancy_agent")
-    graph.add_edge("prepare_input", "efficiency_agent")
-    graph.add_edge("prepare_input", "dead_code_agent")
-    graph.add_edge("prepare_input", "security_agent")
-
-    # Fan-In: Merge agent findings into aggregator
-    graph.add_edge("redundancy_agent", "aggregator")
-    graph.add_edge("efficiency_agent", "aggregator")
-    graph.add_edge("dead_code_agent", "aggregator")
+    graph.add_edge("redundancy_agent", "efficiency_agent")
+    graph.add_edge("efficiency_agent", "dead_code_agent")
+    graph.add_edge("dead_code_agent", "security_agent")
     graph.add_edge("security_agent", "aggregator")
 
     # Linear pipeline: Aggregator -> Planner -> Patch Generator -> Apply Patch -> Verification
@@ -80,17 +83,23 @@ def build_graph():
     graph.add_edge("patch_generator", "apply_patch")
     graph.add_edge("apply_patch", "verification")
 
-    # Conditional Routing: If failed and retries remain, loop back to retry_patch_generator
+    # Conditional Routing:
+    #   - retry: loop back to retry_patch_generator (then apply_patch -> verification again)
+    #   - end  : route to commit_and_push regardless of verdict (always push for human review)
     graph.add_conditional_edges(
         "verification",
         route_verification,
         {
-            "end": END,
+            "end": "commit_and_push",
             "retry": "retry_patch_generator",
         },
     )
     # Loop back to apply_patch after retry patch generation
     graph.add_edge("retry_patch_generator", "apply_patch")
+
+    # Final publisher pipeline
+    graph.add_edge("commit_and_push", "create_pr")
+    graph.add_edge("create_pr", END)
 
     return graph.compile()
 
@@ -101,6 +110,9 @@ def run_coderefine_workflow(
     analysis_id: Optional[str] = None,
     static_findings: Optional[List[Finding]] = None,
     max_retries: int = 2,
+    repo_url: str = "",
+    pr_number: Optional[int] = None,
+    base_branch: Optional[str] = None,
 ) -> dict:
     """Helper to construct context, run static tools, and execute the compiled graph."""
     run_id = analysis_id or f"run-{uuid.uuid4().hex[:8]}"
@@ -119,6 +131,9 @@ def run_coderefine_workflow(
     initial_state: CodeRefineState = {
         "analysis_id": run_id,
         "repo_path": repo_path,
+        "repo_url": repo_url,
+        "pr_number": pr_number,
+        "base_branch": base_branch,
         "changed_files": changed_files,
         "code_context": code_context,
         "static_findings": static_findings,
@@ -133,6 +148,8 @@ def run_coderefine_workflow(
         "max_retries": max_retries,
         "repair_feedback": None,
         "repair_history": [],
+        "improvement_branch": None,
+        "improvement_pr_url": None,
         "status": "initialized",
     }
 

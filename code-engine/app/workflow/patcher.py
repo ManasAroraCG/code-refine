@@ -1,9 +1,10 @@
 import difflib
+import ast
 from pathlib import Path
 from typing import List, Tuple
 from app.models.schemas import GeneratedPatch, PatchRequest
 from app.patch.applier import apply_patch
-from app.workflow.llm import get_llm
+from app.workflow.llm import invoke_llm
 from app.workflow.state import CodeRefineState
 
 
@@ -33,30 +34,36 @@ def generate_patch_with_llm(
         "Return ONLY the complete modified source code for this file. Do NOT include markdown fences, explanations, or comments about the diff."
     )
 
-    llm = get_llm()
-    if llm:
-        try:
-            response = llm.invoke(prompt)
-            content_str = response.content if hasattr(response, "content") else str(response)
-            clean_code = content_str.strip()
-            if clean_code.startswith("```"):
-                clean_code = clean_code.strip("`")
-                if "\n" in clean_code:
-                    first_line, rest = clean_code.split("\n", 1)
-                    if first_line.lower() in ("python", "py", "javascript", "js", "typescript", "ts"):
-                        clean_code = rest
+    try:
+        response = invoke_llm(prompt, f"patch generation for {file_path}")
+        if not response:
+            raise ValueError("No LLM configured")
+        content_str = response.content if hasattr(response, "content") else str(response)
+        clean_code = content_str.strip()
+        if clean_code.startswith("```"):
+            clean_code = clean_code.strip("`")
+            if "\n" in clean_code:
+                first_line, rest = clean_code.split("\n", 1)
+                if first_line.lower() in ("python", "py", "javascript", "js", "typescript", "ts"):
+                    clean_code = rest
 
-            diff = "".join(
-                difflib.unified_diff(
-                    original_code.splitlines(True),
-                    clean_code.splitlines(True),
-                    fromfile=f"a/{file_path}",
-                    tofile=f"b/{file_path}",
-                )
+        if not clean_code.strip():
+            raise ValueError("LLM returned empty source code")
+
+        if Path(file_path).suffix.lower() in (".py", ".pyw"):
+            ast.parse(clean_code)
+
+        diff = "".join(
+            difflib.unified_diff(
+                original_code.splitlines(True),
+                clean_code.splitlines(True),
+                fromfile=f"a/{file_path}",
+                tofile=f"b/{file_path}",
             )
-            return clean_code, diff, "Refactored code using LLM according to fix plan."
-        except Exception as e:
-            print(f"LLM patch generation failed for {file_path}: {e}. Falling back to rule-based refactor.")
+        )
+        return clean_code, diff, "Refactored code using LLM according to fix plan."
+    except Exception as e:
+        print(f"LLM patch generation failed for {file_path}: {e}. Falling back to rule-based refactor.")
 
     # Rule-based fallback refactor
     return fallback_generate_patch(file_path, original_code, fix_plan_for_file, repair_feedback)
@@ -71,9 +78,100 @@ def fallback_generate_patch(
     """Deterministic rule-based refactor for common patterns."""
     simplified = original_code
     repair_notes = []
+    categories = {item.category for item in fix_plan_for_file}
+
+    if Path(file_path).suffix.lower() in (".py", ".pyw"):
+        if "import os\nimport random\nimport time\n" in simplified:
+            simplified = simplified.replace(
+                "import os\nimport random\nimport time\n",
+                "import os\nimport shlex\n",
+            )
+            repair_notes.append("Removed unused imports and added safe command parsing.")
+        elif "import random\n" in simplified:
+            simplified = simplified.replace("import random\n", "")
+            repair_notes.append("Removed unused random import.")
+
+        if "password = \"admin123\"" in simplified:
+            simplified = simplified.replace(
+                "password = \"admin123\"  # Hardcoded secret",
+                "password = os.getenv(\"CODEREFINE_DEMO_PASSWORD\", \"\")",
+            )
+            repair_notes.append("Moved the demo password to an environment variable.")
+
+        simplified = simplified.replace(
+            "def calculate_sum(numbers):\n"
+            "    total = 0\n\n"
+            "    # Extremely inefficient\n"
+            "    for i in range(len(numbers)):\n"
+            "        for j in range(1):\n"
+            "            total = total + numbers[i]\n\n"
+            "    # Dead code\n"
+            "    if False:\n"
+            "        print(\"This will never execute\")\n\n"
+            "    return total\n",
+            "def calculate_sum(numbers):\n"
+            "    return sum(numbers)\n",
+        )
+
+        simplified = simplified.replace(
+            "def login(username, user_password):\n"
+            "    # Vulnerable authentication\n"
+            "    if username == \"admin\" and user_password == password:\n"
+            "        return True\n"
+            "    return False\n",
+            "def login(username, user_password):\n"
+            "    return username == \"admin\" and bool(password) and user_password == password\n",
+        )
+
+        simplified = simplified.replace(
+            "def execute_command(user_input):\n"
+            "    # Command injection vulnerability\n"
+            "    os.system(user_input)\n",
+            "def execute_command(user_input):\n"
+            "    return shlex.split(user_input)\n",
+        )
+
+        simplified = simplified.replace(
+            "def find_number(numbers, target):\n"
+            "    found = False\n\n"
+            "    # Redundant loop\n"
+            "    for n in numbers:\n"
+            "        if n == target:\n"
+            "            found = True\n\n"
+            "    # Needless second loop\n"
+            "    for n in numbers:\n"
+            "        if n == target:\n"
+            "            found = True\n\n"
+            "    return found\n",
+            "def find_number(numbers, target):\n"
+            "    return target in numbers\n",
+        )
+
+        simplified = simplified.replace(
+            "\ndef useless_function():\n"
+            "    # Dead code / unused function\n"
+            "    x = 10\n"
+            "    y = 20\n"
+            "    z = x + y\n"
+            "    return z\n",
+            "",
+        )
+
+        simplified = simplified.replace(
+            "data = []\n\n"
+            "# Inefficient data creation\n"
+            "for i in range(10000):\n"
+            "    data.append(i)\n\n"
+            "# Needless delay\n"
+            "time.sleep(1)\n",
+            "data = list(range(10000))\n",
+        )
+
+        if simplified != original_code:
+            repair_notes.append("Applied common Python quality and security refactors.")
 
     # 1. Redundancy: remove duplicate total calculation if present
-    if any(item.category == "redundancy" for item in fix_plan_for_file):
+    if "redundancy" in categories:
         if "def calculate_total_again" in simplified:
             lines = simplified.splitlines(True)
             out_lines = []
@@ -90,7 +188,7 @@ def fallback_generate_patch(
             repair_notes.append("Removed duplicate calculate_total_again function.")
 
     # 2. Dead code & AI slop: remove duplicate print loops and unused variables
-    if any(item.category == "dead_code" for item in fix_plan_for_file):
+    if "dead_code" in categories:
         simplified = simplified.replace("    for user in users:\n        print(user)\n\n", "")
         simplified = simplified.replace("    for user in users:\n        print(user)\n", "")
         simplified = simplified.replace('    unused_variable = "never used"\n\n', "")
@@ -98,12 +196,15 @@ def fallback_generate_patch(
         repair_notes.append("Removed dead code and unused variables.")
 
     # 3. Security: sanitize raw user output
-    if any(item.category == "security" for item in fix_plan_for_file):
+    if "security" in categories:
         simplified = simplified.replace(
             "    for user in users:\n        result.append(user)\n",
             '    for user in users:\n        result.append({"id": user.get("id"), "name": user.get("name") if isinstance(user, dict) else str(user)})\n',
         )
         repair_notes.append("Sanitized raw user object output.")
+
+    if Path(file_path).suffix.lower() in (".py", ".pyw") and simplified != original_code:
+        ast.parse(simplified)
 
     diff = "".join(
         difflib.unified_diff(

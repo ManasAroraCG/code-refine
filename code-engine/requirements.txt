@@ -5,6 +5,7 @@ ruff==0.16.7
 mypy==2.3.1
 bandit==1.9.4
 python-dotenv==1.2.3
+httpx>=0.27.0
 langchain==0.3.20
 langchain-core==0.3.43
 langgraph==0.2.74

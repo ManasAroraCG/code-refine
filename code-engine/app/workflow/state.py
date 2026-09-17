@@ -13,6 +13,9 @@ from app.models.schemas import (
 class CodeRefineState(TypedDict):
     analysis_id: str
     repo_path: str
+    repo_url: str                          # GitHub repo URL (needed to push & create PR)
+    pr_number: Optional[int]               # Original PR number being improved
+    base_branch: Optional[str]             # Base branch of the original PR (merge target)
     changed_files: List[str]
     code_context: CodeContext
     static_findings: List[Finding]
@@ -27,4 +30,6 @@ class CodeRefineState(TypedDict):
     max_retries: int
     repair_feedback: Optional[str]
     repair_history: List[RepairAttempt]
+    improvement_branch: Optional[str]      # Branch name after push
+    improvement_pr_url: Optional[str]      # URL of the created GitHub PR
     status: str

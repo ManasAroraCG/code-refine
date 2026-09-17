@@ -187,6 +187,10 @@ class AnalyzeRequest(BaseModel):
     analysis_id: Optional[str] = None
     repository_path: Optional[str] = None
     repo_path: Optional[str] = None
+    # GitHub context — required for improvement branch + PR creation
+    repo_url: Optional[str] = None
+    pr_number: Optional[int] = None
+    base_branch: Optional[str] = None
     changed_files: List[str] = Field(default_factory=list)
     language: Optional[str] = "python"
     agents: List[str] = Field(default_factory=list)
@@ -234,3 +238,6 @@ class WorkflowResponse(BaseModel):
     verification_result: Optional[VerificationResult] = None
     retry_count: int = 0
     repair_history: List[RepairAttempt] = Field(default_factory=list)
+    # Improvement branch & PR fields
+    improvement_branch: Optional[str] = None
+    improvement_pr_url: Optional[str] = None
