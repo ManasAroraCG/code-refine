@@ -573,7 +573,7 @@ export default function Home() {
   const [connected, setConnected] = useState(false);
   const [repositories, setRepositories] = useState([]);
   const [reposLoading, setReposLoading] = useState(false);
-  const [connectedRepoIds, setConnectedRepoIds] = useState(() => new Set());
+  const [connectedRepositoryId, setConnectedRepositoryId] = useState('');
   const [selectedRepository, setSelectedRepository] = useState(null);
   const [branches, setBranches] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
@@ -614,12 +614,16 @@ export default function Home() {
     }
   };
 
-  const handleConnectRepository = (repositoryId) => {
-    setConnectedRepoIds((previous) => {
-      const next = new Set(previous);
-      next.add(repositoryId);
-      return next;
-    });
+  const handleConnectRepository = async (repository) => {
+    const gitHubRepositoryId = getGitHubRepositoryId(repository);
+
+    if (!gitHubRepositoryId) {
+      setRepoPanelError('GitHub repository id is missing for this repository.');
+      return;
+    }
+
+    setConnectedRepositoryId(gitHubRepositoryId);
+    await handleSelectRepository(repository);
   };
 
   const handleSelectRepository = async (repository) => {
@@ -781,7 +785,7 @@ export default function Home() {
         </div>
       </section>
 
-      {connected && (
+      {connected && !connectedRepositoryId && (
         <section id="repositories" className="border-y border-slate-100 bg-slate-50/70 px-5 py-20 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -804,7 +808,7 @@ export default function Home() {
                 {repositories.map((repository) => {
                   const repositoryId = getRepositoryKey(repository);
                   const gitHubRepositoryId = getGitHubRepositoryId(repository);
-                  const isRepoConnected = connectedRepoIds.has(repositoryId);
+                  const isRepoConnected = connectedRepositoryId === gitHubRepositoryId;
                   const isSelected = selectedRepository && getRepositoryKey(selectedRepository) === repositoryId;
                   return (
                     <div
@@ -829,7 +833,7 @@ export default function Home() {
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          if (gitHubRepositoryId) handleConnectRepository(gitHubRepositoryId);
+                          handleConnectRepository(repository);
                         }}
                         disabled={isRepoConnected || !gitHubRepositoryId}
                         className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-transform duration-200 hover:-translate-y-0.5 ${
