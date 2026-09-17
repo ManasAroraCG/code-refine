@@ -48,6 +48,7 @@ public class GitHubService : IGitHubService
         return response.Repositories
             .Select(repo => new RepositoryDto
             {
+                Id = DeriveRepositoryId(repo.Id.ToString()),
                 GitHubRepoId = repo.Id.ToString(),
                 Owner = repo.Owner.Login,
                 Name = repo.Name,
@@ -213,6 +214,13 @@ public class GitHubService : IGitHubService
     private async Task<Models.Repository> GetTrackedRepositoryAsync(Guid repositoryId, CancellationToken cancellationToken)
         => await _dbContext.Repositories.FirstOrDefaultAsync(r => r.Id == repositoryId, cancellationToken)
             ?? throw new Exceptions.NotFoundException($"Repository '{repositoryId}' was not found.");
+
+    /// <summary>Derives a stable GUID from a GitHub repository id so callers get a consistent identifier without a database.</summary>
+    private static Guid DeriveRepositoryId(string gitHubRepoId)
+    {
+        var hash = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(gitHubRepoId));
+        return new Guid(hash);
+    }
 
     private async Task<GitHubClient> CreateClientAsync(CancellationToken cancellationToken)
     {

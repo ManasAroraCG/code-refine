@@ -46,6 +46,7 @@ builder.Services.AddHttpClient<IAiService, AiService>((provider, client) =>
 });
 
 builder.Services.AddScoped<IGitService, GitService>();
+builder.Services.AddSingleton<IAnalysisRunStore, InMemoryAnalysisRunStore>();
 builder.Services.AddScoped<IAnalysisService, AnalysisService>();
 
 builder.Services.AddCors(options =>
