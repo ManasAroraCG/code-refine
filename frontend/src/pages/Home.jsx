@@ -12,6 +12,7 @@ import {
   Code2,
   Container,
   GitBranch,
+  GitPullRequest,
   Menu,
   Play,
   RefreshCw,
@@ -571,6 +572,15 @@ export default function Home() {
   const [repositories, setRepositories] = useState([]);
   const [reposLoading, setReposLoading] = useState(false);
   const [connectedRepoIds, setConnectedRepoIds] = useState(() => new Set());
+  const [selectedRepository, setSelectedRepository] = useState(null);
+  const [branches, setBranches] = useState([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [pullRequests, setPullRequests] = useState([]);
+  const [pullRequestsLoading, setPullRequestsLoading] = useState(false);
+  const [selectedPullRequest, setSelectedPullRequest] = useState(null);
+  const [pullRequestFiles, setPullRequestFiles] = useState([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [repoPanelError, setRepoPanelError] = useState('');
 
   const handleAction = async (label, action) => {
     setStatusMessage(`${label} started...`);
@@ -608,6 +618,46 @@ export default function Home() {
       next.add(repositoryId);
       return next;
     });
+  };
+
+  const handleSelectRepository = async (repository) => {
+    setSelectedRepository(repository);
+    setSelectedPullRequest(null);
+    setPullRequestFiles([]);
+    setBranches([]);
+    setPullRequests([]);
+    setRepoPanelError('');
+    setBranchesLoading(true);
+    setPullRequestsLoading(true);
+    try {
+      const [branchList, prList] = await Promise.all([
+        codeRefineService.getBranches(repository.id),
+        codeRefineService.getPullRequests(repository.gitHubRepoId, 'open'),
+      ]);
+      setBranches(Array.isArray(branchList) ? branchList : []);
+      setPullRequests(Array.isArray(prList) ? prList : []);
+    } catch (error) {
+      setRepoPanelError(error.response?.data?.detail || error.message || 'Unable to load repository details.');
+    } finally {
+      setBranchesLoading(false);
+      setPullRequestsLoading(false);
+    }
+  };
+
+  const handleSelectPullRequest = async (pullRequest) => {
+    if (!selectedRepository) return;
+    setSelectedPullRequest(pullRequest);
+    setPullRequestFiles([]);
+    setFilesLoading(true);
+    setRepoPanelError('');
+    try {
+      const files = await codeRefineService.getPullRequestFiles(selectedRepository.gitHubRepoId, pullRequest.number);
+      setPullRequestFiles(Array.isArray(files) ? files : []);
+    } catch (error) {
+      setRepoPanelError(error.response?.data?.detail || error.message || 'Unable to load file changes.');
+    } finally {
+      setFilesLoading(false);
+    }
   };
 
   return (
@@ -687,13 +737,12 @@ export default function Home() {
                   {reposLoading ? 'Connecting…' : (<>Get Started <ArrowRight className="ml-1 inline size-4" /></>)}
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => handleAction('View Example PR', startReview)}
+              <a
+                href="#examples"
                 className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 transition-transform duration-200 hover:-translate-y-0.5 hover:bg-slate-100 sm:w-auto sm:px-6"
               >
                 <Play className="mr-2 size-4" /> View Example PR
-              </button>
+              </a>
             </div>
 
             {statusMessage && (
@@ -739,10 +788,17 @@ export default function Home() {
                 {repositories.map((repository) => {
                   const repositoryId = repository.id || repository.gitHubRepoId;
                   const isRepoConnected = connectedRepoIds.has(repositoryId);
+                  const isSelected = selectedRepository && (selectedRepository.id || selectedRepository.gitHubRepoId) === repositoryId;
                   return (
                     <div
                       key={repositoryId}
-                      className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSelectRepository(repository)}
+                      onKeyDown={(event) => (event.key === 'Enter' ? handleSelectRepository(repository) : undefined)}
+                      className={`flex cursor-pointer flex-col justify-between rounded-2xl border bg-white p-6 shadow-sm transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                        isSelected ? 'border-blue-400 ring-2 ring-blue-200' : 'border-slate-200'
+                      }`}
                     >
                       <div>
                         <div className="flex items-center gap-2 text-slate-500">
@@ -754,7 +810,10 @@ export default function Home() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleConnectRepository(repositoryId)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleConnectRepository(repositoryId);
+                        }}
                         disabled={isRepoConnected}
                         className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-transform duration-200 hover:-translate-y-0.5 ${
                           isRepoConnected
@@ -769,6 +828,114 @@ export default function Home() {
                 })}
               </div>
             )}
+          </div>
+        </section>
+      )}
+
+      {connected && selectedRepository && (
+        <section id="repository-detail" className="px-5 py-20 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div>
+              <p className="text-sm font-semibold text-blue-600">Repository detail</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+                {selectedRepository.fullName || selectedRepository.name}
+              </h2>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
+                Select an open pull request to examine its file changes.
+              </p>
+            </div>
+
+            {repoPanelError && <p className="mt-6 text-sm text-rose-600">{repoPanelError}</p>}
+
+            <div className="mt-10 grid gap-6 lg:grid-cols-[.85fr_1.15fr]">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                <h3 className="flex items-center gap-2 font-semibold text-slate-900">
+                  <GitBranch className="size-4 text-blue-600" /> Branches
+                </h3>
+                {branchesLoading ? (
+                  <p className="mt-4 text-sm text-slate-500">Loading branches…</p>
+                ) : branches.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">No branches found.</p>
+                ) : (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {branches.map((branch) => (
+                      <span
+                        key={branch.name}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                          branch.isDefault ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {branch.name}
+                        {branch.isDefault ? ' · default' : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <h3 className="mt-8 flex items-center gap-2 font-semibold text-slate-900">
+                  <GitPullRequest className="size-4 text-blue-600" /> Open pull requests
+                </h3>
+                {pullRequestsLoading ? (
+                  <p className="mt-4 text-sm text-slate-500">Loading pull requests…</p>
+                ) : pullRequests.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">No open pull requests.</p>
+                ) : (
+                  <div className="mt-4 flex flex-col gap-2">
+                    {pullRequests.map((pullRequest) => {
+                      const isPrSelected = selectedPullRequest?.number === pullRequest.number;
+                      return (
+                        <button
+                          key={pullRequest.number}
+                          type="button"
+                          onClick={() => handleSelectPullRequest(pullRequest)}
+                          className={`rounded-xl border px-4 py-3 text-left text-sm transition-transform duration-200 hover:-translate-y-0.5 ${
+                            isPrSelected ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="block font-medium text-slate-900">#{pullRequest.number} {pullRequest.title}</span>
+                          <span className="mt-1 block text-xs text-slate-500">
+                            {pullRequest.headBranch} → {pullRequest.baseBranch} · {pullRequest.changedFiles} files changed
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                <h3 className="font-semibold text-slate-900">File changes</h3>
+                {!selectedPullRequest ? (
+                  <p className="mt-4 text-sm text-slate-500">Select a pull request to view its file changes.</p>
+                ) : filesLoading ? (
+                  <p className="mt-4 text-sm text-slate-500">Loading file changes…</p>
+                ) : pullRequestFiles.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">No file changes found for PR #{selectedPullRequest.number}.</p>
+                ) : (
+                  <div className="mt-4 flex max-h-[520px] flex-col gap-3 overflow-y-auto pr-1">
+                    {pullRequestFiles.map((file) => (
+                      <div key={file.fileName} className="rounded-xl border border-slate-200 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="truncate font-mono text-xs font-medium text-slate-800">{file.fileName}</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase text-slate-500">
+                            {file.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex gap-3 text-xs">
+                          <span className="text-emerald-600">+{file.additions}</span>
+                          <span className="text-rose-500">-{file.deletions}</span>
+                        </div>
+                        {file.patch && (
+                          <pre className="mt-3 max-h-48 overflow-auto rounded-lg bg-slate-950 p-3 text-[11px] leading-5 text-slate-200">
+                            <code>{file.patch}</code>
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </section>
       )}
