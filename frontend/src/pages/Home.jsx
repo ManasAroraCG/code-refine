@@ -564,6 +564,8 @@ function HowItWorks() {
 }
 
 const GITHUB_ACCOUNT_NAME = 'Arth-CGI';
+const getGitHubRepositoryId = (repository) => repository?.gitHubRepoId || repository?.githubRepoId || repository?.GitHubRepoId;
+const getRepositoryKey = (repository) => getGitHubRepositoryId(repository) || repository?.id || repository?.name;
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -621,6 +623,13 @@ export default function Home() {
   };
 
   const handleSelectRepository = async (repository) => {
+    const gitHubRepositoryId = getGitHubRepositoryId(repository);
+
+    if (!gitHubRepositoryId) {
+      setRepoPanelError('GitHub repository id is missing for this repository.');
+      return;
+    }
+
     setSelectedRepository(repository);
     setSelectedPullRequest(null);
     setPullRequestFiles([]);
@@ -631,8 +640,8 @@ export default function Home() {
     setPullRequestsLoading(true);
     try {
       const [branchList, prList] = await Promise.all([
-        codeRefineService.getBranches(repository.id),
-        codeRefineService.getPullRequests(repository.gitHubRepoId, 'open'),
+        codeRefineService.getBranches(gitHubRepositoryId),
+        codeRefineService.getPullRequests(gitHubRepositoryId, 'open'),
       ]);
       setBranches(Array.isArray(branchList) ? branchList : []);
       setPullRequests(Array.isArray(prList) ? prList : []);
@@ -646,12 +655,19 @@ export default function Home() {
 
   const handleSelectPullRequest = async (pullRequest) => {
     if (!selectedRepository) return;
+    const gitHubRepositoryId = getGitHubRepositoryId(selectedRepository);
+
+    if (!gitHubRepositoryId) {
+      setRepoPanelError('GitHub repository id is missing for this repository.');
+      return;
+    }
+
     setSelectedPullRequest(pullRequest);
     setPullRequestFiles([]);
     setFilesLoading(true);
     setRepoPanelError('');
     try {
-      const files = await codeRefineService.getPullRequestFiles(selectedRepository.gitHubRepoId, pullRequest.number);
+      const files = await codeRefineService.getPullRequestFiles(gitHubRepositoryId, pullRequest.number);
       setPullRequestFiles(Array.isArray(files) ? files : []);
     } catch (error) {
       setRepoPanelError(error.response?.data?.detail || error.message || 'Unable to load file changes.');
@@ -786,9 +802,10 @@ export default function Home() {
             ) : (
               <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {repositories.map((repository) => {
-                  const repositoryId = repository.id || repository.gitHubRepoId;
+                  const repositoryId = getRepositoryKey(repository);
+                  const gitHubRepositoryId = getGitHubRepositoryId(repository);
                   const isRepoConnected = connectedRepoIds.has(repositoryId);
-                  const isSelected = selectedRepository && (selectedRepository.id || selectedRepository.gitHubRepoId) === repositoryId;
+                  const isSelected = selectedRepository && getRepositoryKey(selectedRepository) === repositoryId;
                   return (
                     <div
                       key={repositoryId}
@@ -812,9 +829,9 @@ export default function Home() {
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          handleConnectRepository(repositoryId);
+                          if (gitHubRepositoryId) handleConnectRepository(gitHubRepositoryId);
                         }}
-                        disabled={isRepoConnected}
+                        disabled={isRepoConnected || !gitHubRepositoryId}
                         className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-transform duration-200 hover:-translate-y-0.5 ${
                           isRepoConnected
                             ? 'cursor-default bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:translate-y-0'
