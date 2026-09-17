@@ -500,14 +500,14 @@ function HowItWorks() {
                     <button
                       type="button"
                       onClick={() => approveChanges()}
-                      className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                      className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700"
                     >
                       Approve Changes
                     </button>
                     <button
                       type="button"
                       onClick={() => reviewChanges()}
-                      className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                      className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-transform duration-200 hover:-translate-y-0.5 hover:bg-slate-100"
                     >
                       Review Changes
                     </button>
@@ -552,7 +552,7 @@ function HowItWorks() {
           <button
             type="button"
             onClick={() => startReview()}
-            className="mt-8 inline-flex items-center gap-2 rounded-full bg-blue-600 px-7 py-3 text-sm font-medium text-white hover:bg-blue-700"
+            className="mt-8 inline-flex items-center gap-2 rounded-full bg-blue-600 px-7 py-3 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700"
           >
             Try CodeRefine <ArrowRight />
           </button>
@@ -562,9 +562,15 @@ function HowItWorks() {
   );
 }
 
+const GITHUB_ACCOUNT_NAME = 'Arth-CGI';
+
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [repositories, setRepositories] = useState([]);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [connectedRepoIds, setConnectedRepoIds] = useState(() => new Set());
 
   const handleAction = async (label, action) => {
     setStatusMessage(`${label} started...`);
@@ -579,6 +585,29 @@ export default function Home() {
     } catch (error) {
       setStatusMessage(error.response?.data?.detail || error.message || 'Something went wrong. Please try again.');
     }
+  };
+
+  const handleGetStarted = async () => {
+    setReposLoading(true);
+    setStatusMessage(`Connecting with ${GITHUB_ACCOUNT_NAME}...`);
+    try {
+      const repos = await connectGitHub();
+      setRepositories(Array.isArray(repos) ? repos : []);
+      setConnected(true);
+      setStatusMessage(`Connected with ${GITHUB_ACCOUNT_NAME} · ${Array.isArray(repos) ? repos.length : 0} repositories found.`);
+    } catch (error) {
+      setStatusMessage(error.response?.data?.detail || error.message || 'Something went wrong. Please try again.');
+    } finally {
+      setReposLoading(false);
+    }
+  };
+
+  const handleConnectRepository = (repositoryId) => {
+    setConnectedRepoIds((previous) => {
+      const next = new Set(previous);
+      next.add(repositoryId);
+      return next;
+    });
   };
 
   return (
@@ -601,13 +630,20 @@ export default function Home() {
             <a href="#metrics" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Metrics</a>
             <a href="#pricing" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Pricing</a>
             <a href="https://github.com" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">GitHub</a>
-            <button
-              type="button"
-              onClick={() => handleAction('Get Started', connectGitHub)}
-              className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              Get Started <ArrowRight className="ml-1 inline size-4" />
-            </button>
+            {connected ? (
+              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">
+                <CircleCheck className="size-4" /> Connected with {GITHUB_ACCOUNT_NAME}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleGetStarted}
+                disabled={reposLoading}
+                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+              >
+                {reposLoading ? 'Connecting…' : (<>Get Started <ArrowRight className="ml-1 inline size-4" /></>)}
+              </button>
+            )}
           </nav>
 
           <button
@@ -637,17 +673,24 @@ export default function Home() {
             </p>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => handleAction('Get Started', connectGitHub)}
-                className="rounded-full bg-blue-600 px-6 py-3 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                Get Started <ArrowRight className="ml-1 inline size-4" />
-              </button>
+              {connected ? (
+                <span className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-50 px-6 py-3 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">
+                  <CircleCheck className="size-4" /> Connected with {GITHUB_ACCOUNT_NAME}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGetStarted}
+                  disabled={reposLoading}
+                  className="rounded-full bg-blue-600 px-6 py-3 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
+                >
+                  {reposLoading ? 'Connecting…' : (<>Get Started <ArrowRight className="ml-1 inline size-4" /></>)}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => handleAction('View Example PR', startReview)}
-                className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100 sm:w-auto sm:px-6"
+                className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 transition-transform duration-200 hover:-translate-y-0.5 hover:bg-slate-100 sm:w-auto sm:px-6"
               >
                 <Play className="mr-2 size-4" /> View Example PR
               </button>
@@ -672,6 +715,63 @@ export default function Home() {
           <ProductMockup />
         </div>
       </section>
+
+      {connected && (
+        <section id="repositories" className="border-y border-slate-100 bg-slate-50/70 px-5 py-20 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+              <div>
+                <p className="text-sm font-semibold text-blue-600">{GITHUB_ACCOUNT_NAME}</p>
+                <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Available repositories</h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
+                  Pick the repositories you want CodeRefine to review automatically on every pull request.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                <CircleCheck className="size-3.5" /> {repositories.length} repositories found
+              </span>
+            </div>
+
+            {repositories.length === 0 ? (
+              <p className="mt-10 text-sm text-slate-500">No repositories were found for this account.</p>
+            ) : (
+              <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {repositories.map((repository) => {
+                  const repositoryId = repository.id || repository.gitHubRepoId;
+                  const isRepoConnected = connectedRepoIds.has(repositoryId);
+                  return (
+                    <div
+                      key={repositoryId}
+                      className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <GitBranch className="size-4 text-blue-600" />
+                          <span className="text-xs font-medium uppercase tracking-wide">{repository.defaultBranch || 'main'}</span>
+                        </div>
+                        <h3 className="mt-3 truncate font-semibold text-slate-900">{repository.fullName || repository.name}</h3>
+                        <p className="mt-2 text-xs text-slate-500">{repository.isPrivate ? 'Private repository' : 'Public repository'}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleConnectRepository(repositoryId)}
+                        disabled={isRepoConnected}
+                        className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-transform duration-200 hover:-translate-y-0.5 ${
+                          isRepoConnected
+                            ? 'cursor-default bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:translate-y-0'
+                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                      >
+                        {isRepoConnected ? (<><CircleCheck className="size-4" /> Connected</>) : 'Connect'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="border-y border-slate-100 bg-slate-50/70 px-5 py-24 lg:px-8">
         <div className="mx-auto max-w-7xl">
@@ -844,15 +944,16 @@ export default function Home() {
           <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
             <button
               type="button"
-              onClick={() => handleAction('Connect GitHub', connectGitHub)}
-              className="inline-flex items-center justify-center rounded-full bg-blue-600 px-6 py-3 text-sm font-medium text-white hover:bg-blue-700"
+              onClick={handleGetStarted}
+              disabled={reposLoading || connected}
+              className="inline-flex items-center justify-center rounded-full bg-blue-600 px-6 py-3 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-default disabled:opacity-70 disabled:hover:translate-y-0"
             >
-              <GitBranch className="mr-2 size-4" /> Connect GitHub repository
+              <GitBranch className="mr-2 size-4" /> {connected ? `Connected with ${GITHUB_ACCOUNT_NAME}` : 'Connect GitHub repository'}
             </button>
             <button
               type="button"
               onClick={() => handleAction('Load repositories', connectGitHub)}
-              className="rounded-full border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              className="rounded-full border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 transition-transform duration-200 hover:-translate-y-0.5 hover:bg-slate-100"
             >
               Load repositories <ArrowRight className="ml-1 inline size-4" />
             </button>
