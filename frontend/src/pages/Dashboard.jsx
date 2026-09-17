@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { dashboardService } from '../services/dashboardService';
+import logo from '../assets/logos/Logo.png';
 
 const beforeCode = `async function processUser(data) {
   if (data && data.email) {
@@ -178,7 +179,7 @@ function HowItWorks() {
             From Pull Request to Production-Ready Code.
           </h2>
           <p className="mt-6 text-lg leading-8 text-slate-600">
-            CodeRefine closes the loop between code review and verified improvement. It analyzes your Pull Request,
+            Code Refine closes the loop between code review and verified improvement. It analyzes your Pull Request,
             generates targeted fixes, verifies them in an isolated environment, and prepares the changes for developer
             approval.
           </p>
@@ -187,7 +188,7 @@ function HowItWorks() {
         <div className="relative mx-auto mt-16 max-w-5xl">
           <div className="pointer-events-none absolute bottom-12 left-1/2 top-12 hidden w-px -translate-x-1/2 bg-gradient-to-b from-blue-200 via-blue-400 to-emerald-300 md:block" />
           <div className="relative flex flex-col gap-5">
-            <WorkflowStep number="01" title="GitHub Pull Request" description="CodeRefine starts with the Pull Request you want to review.">
+            <WorkflowStep number="01" title="GitHub Pull Request" description="Code Refine starts with the Pull Request you want to review.">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-slate-900">PR #245 · auth-refactor</span>
@@ -234,7 +235,7 @@ function HowItWorks() {
             <WorkflowStep number="03" title="AI Review Agents" description="Specialized agents inspect different aspects of the code.">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                 <div className="col-span-2 flex items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 p-4 text-center text-sm font-semibold text-blue-700 sm:col-span-5">
-                  CodeRefine Agent <Sparkles className="ml-2 size-4" />
+                  Code Refine Agent <Sparkles className="ml-2 size-4" />
                 </div>
                 {['Code Review', 'Security', 'Bug Detection', 'Performance', 'Maintainability'].map((agent, index) => (
                   <div
@@ -274,7 +275,7 @@ function HowItWorks() {
               <ArrowDown className="size-4" />
             </div>
 
-            <WorkflowStep number="05" title="Targeted Fix" description="CodeRefine generates focused changes based on the detected issue instead of rewriting unrelated code.">
+            <WorkflowStep number="05" title="Targeted Fix" description="Code Refine generates focused changes based on the detected issue instead of rewriting unrelated code.">
               <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 font-mono text-[11px] sm:grid-cols-2">
                 <div className="border-b border-slate-800 p-4 sm:border-b-0 sm:border-r">
                   <p className="mb-3 text-slate-500">Before</p>
@@ -333,7 +334,7 @@ function HowItWorks() {
               <RefreshCw className="size-4" />
             </div>
 
-            <WorkflowStep number="08" title="Repair Loop" description="CodeRefine uses verification failures as feedback and iterates on the fix.">
+            <WorkflowStep number="08" title="Repair Loop" description="Code Refine uses verification failures as feedback and iterates on the fix.">
               <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                   <p className="font-semibold text-amber-900">Verification failed</p>
@@ -355,7 +356,7 @@ function HowItWorks() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                   <div>
-                    <p className="font-semibold text-slate-900">CodeRefine Improvement</p>
+                    <p className="font-semibold text-slate-900">Code Refine Improvement</p>
                     <p className="mt-2 text-xs text-slate-500">3 files modified · 4 findings addressed · 214 tests passed</p>
                   </div>
                   <div className="flex gap-2">
@@ -377,7 +378,7 @@ function HowItWorks() {
             <WorkflowStep number="10" title="Improvement Pull Request" description="The loop closes with a verified PR ready for your team to review.">
               <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-900">CodeRefine Improvement #246</span>
+                  <span className="font-semibold text-slate-900">Code Refine Improvement #246</span>
                   <span className="text-xs font-medium text-emerald-600">Ready for Review</span>
                 </div>
                 <p className="mt-3 text-sm text-slate-700">Improve authentication service</p>
@@ -395,7 +396,7 @@ function HowItWorks() {
           <h3 className="text-3xl font-semibold tracking-tight sm:text-5xl">Code review, closed-loop.</h3>
           <p className="mt-4 text-lg text-slate-600">Analyze. Fix. Verify. Repair. Improve.</p>
           <button className="mt-8 inline-flex items-center gap-2 rounded-full bg-blue-600 px-7 py-3 text-sm font-medium text-white hover:bg-blue-700">
-            Try CodeRefine <ArrowRight />
+            Try Code Refine <ArrowRight />
           </button>
         </div>
       </div>
@@ -424,10 +425,8 @@ export default function Dashboard() {
       <header className="fixed inset-x-0 top-0 z-50 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8">
           <a href="#top" className="flex items-center gap-2 font-semibold tracking-tight">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-blue-600 text-white">
-              <Code2 className="size-4" />
-            </span>
-            CodeRefine
+            <img src={logo} alt="Code Refine" className="h-10 w-auto mix-blend-multiply" />
+            Code Refine
           </a>
 
           <nav
@@ -482,7 +481,7 @@ export default function Dashboard() {
               Turn AI-generated code into <span className="text-blue-600">production-ready</span> code.
             </h1>
             <p className="mt-7 max-w-xl text-xl leading-8 text-slate-600">
-              CodeRefine automatically analyzes AI-generated code from GitHub Pull Requests, measures code quality,
+              Code Refine automatically analyzes AI-generated code from GitHub Pull Requests, measures code quality,
               and recommends improvements before merge.
             </p>
 
@@ -546,7 +545,7 @@ export default function Dashboard() {
           <div className="mt-14 grid gap-5 md:grid-cols-3">
             {[
               ['01', 'Developer opens PR', 'Your existing workflow stays exactly the same.'],
-              ['02', 'CodeRefine analyzes', 'Every line is measured across five quality dimensions.'],
+              ['02', 'Code Refine analyzes', 'Every line is measured across five quality dimensions.'],
               ['03', 'Improve with confidence', 'Get precise suggestions before you merge.'],
             ].map(([number, title, text], index) => (
               <div key={number} className="relative border-t border-slate-200 pt-6">
@@ -572,13 +571,13 @@ export default function Dashboard() {
               </h2>
             </div>
             <p className="max-w-sm text-sm leading-6 text-slate-400">
-              From tangled functions to code your whole team can understand, CodeRefine makes progress visible.
+              From tangled functions to code your whole team can understand, Code Refine makes progress visible.
             </p>
           </div>
 
           <div className="mt-14 grid gap-5 lg:grid-cols-2">
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-[.18em] text-slate-500">Before CodeRefine</p>
+              <p className="mb-3 text-xs font-medium uppercase tracking-[.18em] text-slate-500">Before Code Refine</p>
               <CodePanel />
               <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                 {[['Maintainability', '61'], ['Complexity', '18'], ['Readability', '65'], ['Security', '72']].map(([label, value]) => (
@@ -591,7 +590,7 @@ export default function Dashboard() {
             </div>
 
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-[.18em] text-emerald-400">After CodeRefine</p>
+              <p className="mb-3 text-xs font-medium uppercase tracking-[.18em] text-emerald-400">After Code Refine</p>
               <CodePanel after />
               <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                 {[['Maintainability', '91'], ['Complexity', '8'], ['Readability', '94'], ['Security', '89']].map(([label, value]) => (
@@ -660,7 +659,7 @@ export default function Dashboard() {
               ['12,480', 'Repositories analyzed'],
               ['84,210', 'Pull requests reviewed'],
               ['6.2M', 'Lines improved'],
-              ['420+', 'Teams using CodeRefine'],
+              ['420+', 'Teams using Code Refine'],
             ].map(([value, label]) => (
               <div key={label}>
                 <p className="text-3xl font-semibold tracking-tight">{value}</p>
@@ -690,8 +689,8 @@ export default function Dashboard() {
 
       <footer className="border-t border-slate-100 px-5 py-8 lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 text-sm text-slate-500 sm:flex-row">
-          <span className="font-semibold text-slate-900">CodeRefine</span>
-          <span>© 2026 CodeRefine. Quality for the AI era.</span>
+          <span className="font-semibold text-slate-900">Code Refine</span>
+          <span>© 2026 Code Refine. Quality for the AI era.</span>
           <div className="flex gap-5">
             <a href="#features" className="hover:text-slate-900">Features</a>
             <a href="#pricing" className="hover:text-slate-900">Pricing</a>

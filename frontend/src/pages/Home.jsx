@@ -24,29 +24,62 @@ import {
   Zap,
 } from 'lucide-react';
 import { codeRefineService } from '../services/codeRefineService';
+import logo from '../assets/logos/Logo.png';
 
 const connectGitHub = () => codeRefineService.getRepositories();
 const approveChanges = () => codeRefineService.approveAnalysis();
 const reviewChanges = () => codeRefineService.rejectAnalysis();
 
-const beforeCode = `async function processUser(data) {
-  if (data && data.email) {
-    const valid = await validateEmail(data.email)
-    if (valid) {
-      const user = await db.users.find(data.email)
-      if (user) return { user, ok: true }
+const beforeCode = `async function syncRepositoryReview(repo, pullRequest) {
+  let score = 0
+  let findings = []
+  let files = await github.getFiles(repo.id, pullRequest.number)
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    if (file.status !== 'removed') {
+      const content = await github.getContent(repo.id, file.filename)
+      const result = await ai.review(content, pullRequest.title)
+      if (result && result.issues) {
+        for (let j = 0; j < result.issues.length; j++) {
+          findings.push({
+            file: file.filename,
+            severity: result.issues[j].severity,
+            message: result.issues[j].message,
+          })
+        }
+      }
+      score = score + result.score
     }
   }
-  return { user: null, ok: false }
+  await db.reviews.insert({ repo, pullRequest, score, findings })
+  if (findings.length > 0) await slack.send('Review has issues')
+  return { score, findings }
 }`;
 
-const afterCode = `async function processUser(data) {
-  const email = data?.email
-  if (!email || !(await validateEmail(email))) {
-    return { user: null, ok: false }
-  }
-  const user = await db.users.find(email)
-  return { user, ok: Boolean(user) }
+const afterCode = `async function syncRepositoryReview(repo, pullRequest) {
+  const changedFiles = await github.getFiles(repo.gitHubRepoId, pullRequest.number)
+  const reviewableFiles = changedFiles.filter(({ status }) => status !== 'removed')
+
+  const fileReviews = await Promise.all(
+    reviewableFiles.map(async (file) => {
+      const content = await github.getContent(repo.gitHubRepoId, file.filename)
+      const review = await ai.review(content, pullRequest.title)
+      return { file, review }
+    })
+  )
+
+  const findings = fileReviews.flatMap(({ file, review }) =>
+    (review?.issues ?? []).map((issue) => ({
+      file: file.filename,
+      severity: issue.severity,
+      message: issue.message,
+    }))
+  )
+
+  const score = average(fileReviews.map(({ review }) => review?.score ?? 0))
+  await db.reviews.insert({ repoId: repo.id, pullRequestNumber: pullRequest.number, score, findings })
+  if (findings.some(({ severity }) => severity === 'high')) await slack.send('High-risk review finding')
+  return { score, findings }
 }`;
 
 const metrics = [
@@ -68,7 +101,7 @@ const features = [
 
 function ProductMockup() {
   return (
-    <div className="relative mx-auto w-full max-w-[680px] rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_24px_80px_-32px_rgba(15,23,42,.28)] sm:p-6">
+    <div className="relative mx-auto w-full max-w-[820px] rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,.28)] sm:p-8">
       <div className="flex items-center justify-between border-b border-slate-100 pb-4">
         <div className="flex items-center gap-2">
           <div className="flex size-7 items-center justify-center rounded-lg bg-blue-600 text-white">
@@ -136,7 +169,7 @@ function CodePanel({ after = false }) {
   const lines = (after ? afterCode : beforeCode).split('\n');
 
   return (
-    <div className={`flex h-[300px] min-h-0 flex-col overflow-hidden rounded-2xl border ${after ? 'border-emerald-200 bg-[#dff7f1]' : 'border-slate-700 bg-slate-900'}`}>
+    <div className={`flex h-[520px] min-h-0 flex-col overflow-hidden rounded-2xl border ${after ? 'border-emerald-200 bg-[#dff7f1]' : 'border-slate-700 bg-slate-900'}`}>
       <div className="flex items-center justify-between border-b border-inherit px-4 py-3">
         <span className={`font-mono text-[11px] ${after ? 'text-emerald-800' : 'text-slate-300'}`}>
           user-service.ts
@@ -146,7 +179,7 @@ function CodePanel({ after = false }) {
         </span>
       </div>
 
-      <pre className={`flex-1 overflow-x-auto overflow-y-auto p-4 text-[11px] leading-6 ${after ? 'text-slate-800' : 'text-slate-100'}`}>
+      <pre className={`flex-1 overflow-x-auto overflow-y-auto p-4 text-[10.5px] leading-5 ${after ? 'text-slate-800' : 'text-slate-100'}`}>
         <code>
           {lines.map((line, index) => (
             <div key={index} className="flex">
@@ -236,7 +269,7 @@ function HowItWorks({ onTryCodeRefine }) {
             From Pull Request to Production-Ready Code.
           </h2>
           <p className="mt-6 text-lg leading-8 text-slate-600">
-            CodeRefine closes the loop between code review and verified improvement. It analyzes your Pull Request,
+            Code Refine closes the loop between code review and verified improvement. It analyzes your Pull Request,
             generates targeted fixes, verifies them in an isolated environment, and prepares the changes for developer
             approval.
           </p>
@@ -251,7 +284,7 @@ function HowItWorks({ onTryCodeRefine }) {
               }}
               number="01"
               title="GitHub Pull Request"
-              description="CodeRefine starts with the Pull Request you want to review."
+              description="Code Refine starts with the Pull Request you want to review."
               activeStep={activeStep}
               isActive={activeStep === 0}
             >
@@ -319,7 +352,7 @@ function HowItWorks({ onTryCodeRefine }) {
             >
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                 <div className="col-span-2 flex items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 p-4 text-center text-sm font-semibold text-blue-700 sm:col-span-5">
-                  CodeRefine Agent <Sparkles className="ml-2 size-4" />
+                  Code Refine Agent <Sparkles className="ml-2 size-4" />
                 </div>
                 {['Code Review', 'Security', 'Bug Detection', 'Performance', 'Maintainability'].map((agent, index) => (
                   <div
@@ -374,7 +407,7 @@ function HowItWorks({ onTryCodeRefine }) {
               }}
               number="05"
               title="Targeted Fix"
-              description="CodeRefine generates focused changes based on the detected issue instead of rewriting unrelated code."
+              description="Code Refine generates focused changes based on the detected issue instead of rewriting unrelated code."
               activeStep={activeStep}
               isActive={activeStep === 4}
             >
@@ -460,7 +493,7 @@ function HowItWorks({ onTryCodeRefine }) {
               }}
               number="08"
               title="Repair Loop"
-              description="CodeRefine uses verification failures as feedback and iterates on the fix."
+              description="Code Refine uses verification failures as feedback and iterates on the fix."
               activeStep={activeStep}
               isActive={activeStep === 7}
             >
@@ -494,7 +527,7 @@ function HowItWorks({ onTryCodeRefine }) {
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                   <div>
-                    <p className="font-semibold text-slate-900">CodeRefine Improvement</p>
+                    <p className="font-semibold text-slate-900">Code Refine Improvement</p>
                     <p className="mt-2 text-xs text-slate-500">3 files modified · 4 findings addressed · 214 tests passed</p>
                   </div>
                   <div className="flex gap-2">
@@ -533,7 +566,7 @@ function HowItWorks({ onTryCodeRefine }) {
             >
               <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-900">CodeRefine Improvement #246</span>
+                  <span className="font-semibold text-slate-900">Code Refine Improvement #246</span>
                   <span className="text-xs font-medium text-emerald-600">Ready for Review</span>
                 </div>
                 <p className="mt-3 text-sm text-slate-700">Improve authentication service</p>
@@ -555,7 +588,7 @@ function HowItWorks({ onTryCodeRefine }) {
             onClick={onTryCodeRefine}
             className="mt-8 inline-flex items-center gap-2 rounded-full bg-blue-600 px-7 py-3 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700"
           >
-            Try CodeRefine <ArrowRight />
+            Try Code Refine <ArrowRight />
           </button>
         </div>
       </div>
@@ -579,6 +612,13 @@ const getAnalysisPatches = (analysis) => analysis?.patches || analysis?.Patches 
 const getRemovedDiffLines = (diff) => splitCodeLines(diff).filter((line) => line.startsWith('-') && !line.startsWith('---')).map((line) => line.slice(1).trim());
 const getAddedDiffLines = (diff) => splitCodeLines(diff).filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1).trim());
 const isChangedCodeLine = (line, changedLines) => line.trim() && changedLines.includes(line.trim());
+const getApiErrorMessage = (error, fallback) => {
+  if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+    return 'Unable to reach the backend API. Start CodeRefine.Api and try connecting again.';
+  }
+
+  return error.response?.data?.detail || error.message || fallback;
+};
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -612,7 +652,7 @@ export default function Home() {
       setConnected(true);
       setStatusMessage(`Connected with ${GITHUB_ACCOUNT_NAME} · ${Array.isArray(repos) ? repos.length : 0} repositories found.`);
     } catch (error) {
-      setStatusMessage(error.response?.data?.detail || error.message || 'Something went wrong. Please try again.');
+      setStatusMessage(getApiErrorMessage(error, 'Something went wrong. Please try again.'));
     } finally {
       setReposLoading(false);
     }
@@ -684,7 +724,7 @@ export default function Home() {
       setSelectedBranch(getBranchName(defaultBranch) || '');
       setPullRequests(Array.isArray(prList) ? prList : []);
     } catch (error) {
-      setRepoPanelError(error.response?.data?.detail || error.message || 'Unable to load repository details.');
+      setRepoPanelError(getApiErrorMessage(error, 'Unable to load repository details.'));
     } finally {
       setBranchesLoading(false);
       setPullRequestsLoading(false);
@@ -711,7 +751,7 @@ export default function Home() {
       const files = await codeRefineService.getPullRequestFiles(gitHubRepositoryId, pullRequest.number);
       setPullRequestFiles(Array.isArray(files) ? files : []);
     } catch (error) {
-      setRepoPanelError(error.response?.data?.detail || error.message || 'Unable to load file changes.');
+      setRepoPanelError(getApiErrorMessage(error, 'Unable to load file changes.'));
     } finally {
       setFilesLoading(false);
     }
@@ -741,7 +781,7 @@ export default function Home() {
       const analysisPatches = patches.length > 0 ? patches : await codeRefineService.getPatches(analysisId);
       setRefinedFiles(Array.isArray(analysisPatches) ? analysisPatches : []);
     } catch (error) {
-      setRepoPanelError(error.response?.data?.detail || error.message || 'Unable to refine this pull request.');
+      setRepoPanelError(getApiErrorMessage(error, 'Unable to refine this pull request.'));
     } finally {
       setRefining(false);
     }
@@ -774,20 +814,22 @@ export default function Home() {
       <header className="fixed inset-x-0 top-0 z-50 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8">
           <a href="#top" className="flex items-center gap-2 font-semibold tracking-tight">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-blue-600 text-white">
-              <Code2 className="size-4" />
-            </span>
-            CodeRefine
+            <img src={logo} alt="Code Refine" className="h-10 w-auto mix-blend-multiply" />
+            Code Refine
           </a>
 
           <nav
             className={`${menuOpen ? 'absolute inset-x-4 top-14 flex' : 'hidden'} flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-xl md:static md:flex md:flex-row md:items-center md:gap-7 md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
           >
-            <a href="#features" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Features</a>
-            <a href="#how-it-works" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">How It Works</a>
-            <a href="#examples" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Examples</a>
-            <a href="#metrics" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Metrics</a>
-            <a href="https://github.com" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">GitHub</a>
+            {!connected && (
+              <>
+                <a href="#features" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Features</a>
+                <a href="#how-it-works" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">How It Works</a>
+                <a href="#examples" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Examples</a>
+                <a href="#metrics" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Metrics</a>
+                <a href="https://github.com" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">GitHub</a>
+              </>
+            )}
             {connected ? (
               <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">
                 <CircleCheck className="size-4" /> Connected with {GITHUB_ACCOUNT_NAME}
@@ -815,22 +857,23 @@ export default function Home() {
         </div>
       </header>
 
-      <section id="top" className="relative px-5 pb-24 pt-36 sm:pt-44 lg:px-8">
+      {!connected && (
+      <section id="top" className="relative px-5 pb-24 pt-36 text-center sm:pt-44 lg:px-8">
         <div className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[620px] w-[900px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,rgba(219,234,254,.75),transparent_68%)]" />
-        <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-16 lg:grid-cols-[.9fr_1.1fr]">
-          <div>
+        <div className="relative z-10 mx-auto flex max-w-6xl flex-col items-center gap-14">
+          <div className="mx-auto max-w-4xl">
             <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">
               The quality layer for AI code
             </span>
-            <h1 className="mt-7 max-w-3xl text-5xl font-semibold leading-[1.03] tracking-[-.055em] text-slate-950 sm:text-8xl">
+            <h1 className="mx-auto mt-7 max-w-4xl text-5xl font-semibold leading-[1.03] tracking-[-.055em] text-slate-950 sm:text-8xl">
               Turn AI-generated code into <span className="text-blue-600">production-ready</span> code.
             </h1>
-            <p className="mt-7 max-w-xl text-xl leading-8 text-slate-600">
-              CodeRefine automatically analyzes AI-generated code from GitHub Pull Requests, measures code quality,
+            <p className="mx-auto mt-7 max-w-2xl text-xl leading-8 text-slate-600">
+              Code Refine automatically analyzes AI-generated code from GitHub Pull Requests, measures code quality,
               and recommends improvements before merge.
             </p>
 
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
               {connected ? (
                 <span className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-50 px-6 py-3 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">
                   <CircleCheck className="size-4" /> Connected with {GITHUB_ACCOUNT_NAME}
@@ -840,9 +883,9 @@ export default function Home() {
                   type="button"
                   onClick={handleGetStarted}
                   disabled={reposLoading}
-                  className="rounded-full bg-blue-600 px-6 py-3 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
+                  className="rounded-full bg-blue-600 px-10 py-4 text-base font-semibold text-white shadow-[0_18px_45px_-18px_rgba(37,99,235,.75)] transition-transform duration-200 hover:-translate-y-1 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
                 >
-                  {reposLoading ? 'Connecting…' : (<>Get Started <ArrowRight className="ml-1 inline size-4" /></>)}
+                  {reposLoading ? 'Connecting…' : (<>Get Started <ArrowRight className="ml-2 inline size-5" /></>)}
                 </button>
               )}
               <a
@@ -859,7 +902,7 @@ export default function Home() {
               </p>
             )}
 
-            <div className="mt-8 flex items-center gap-5 text-xs text-slate-500">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-5 text-xs text-slate-500">
               <span className="flex items-center gap-2">
                 <CircleCheck className="size-4 text-emerald-500" /> No credit card required
               </span>
@@ -872,16 +915,17 @@ export default function Home() {
           <ProductMockup />
         </div>
       </section>
+      )}
 
       {connected && !connectedRepositoryId && (
-        <section id="repositories" className="border-y border-slate-100 bg-slate-50/70 px-5 py-20 lg:px-8">
+        <section id="repositories" className="min-h-screen bg-slate-50/80 px-5 pb-20 pt-28 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div>
                 <p className="text-sm font-semibold text-blue-600">{GITHUB_ACCOUNT_NAME}</p>
                 <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Available repositories</h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
-                  Pick the repositories you want CodeRefine to review automatically on every pull request.
+                  Pick the repositories you want Code Refine to review automatically on every pull request.
                 </p>
               </div>
               <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
@@ -942,7 +986,7 @@ export default function Home() {
       )}
 
       {connected && selectedRepository && (
-        <section id="repository-detail" className="px-5 py-20 lg:px-8">
+        <section id="repository-detail" className="min-h-screen bg-slate-50/80 px-5 pb-20 pt-28 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
               <div>
@@ -1185,6 +1229,8 @@ export default function Home() {
         </section>
       )}
 
+      {!connected && (
+      <>
       <section className="border-y border-slate-100 bg-slate-50/70 px-5 py-24 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <p className="text-center text-sm font-medium text-slate-500">AI writes code. But is it production-ready?</p>
@@ -1222,7 +1268,7 @@ export default function Home() {
           <div className="mt-14 grid gap-5 md:grid-cols-3">
             {[
               ['01', 'Developer opens PR', 'Your existing workflow stays exactly the same.'],
-              ['02', 'CodeRefine analyzes', 'Every line is measured across five quality dimensions.'],
+              ['02', 'Code Refine analyzes', 'Every line is measured across five quality dimensions.'],
               ['03', 'Improve with confidence', 'Get precise suggestions before you merge.'],
             ].map(([number, title, text], index) => (
               <div key={number} className="relative border-t border-slate-200 pt-6">
@@ -1248,13 +1294,13 @@ export default function Home() {
               </h2>
             </div>
             <p className="max-w-sm text-sm leading-6 text-slate-400">
-              From tangled functions to code your whole team can understand, CodeRefine makes progress visible.
+              From tangled functions to code your whole team can understand, Code Refine makes progress visible.
             </p>
           </div>
 
           <div className="mt-14 grid gap-5 lg:grid-cols-2">
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-[.18em] text-slate-500">Before CodeRefine</p>
+              <p className="mb-3 text-xs font-medium uppercase tracking-[.18em] text-slate-500">Before Code Refine</p>
               <CodePanel />
               <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                 {[['Maintainability', '61'], ['Complexity', '18'], ['Readability', '65'], ['Security', '72']].map(([label, value]) => (
@@ -1267,7 +1313,7 @@ export default function Home() {
             </div>
 
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-[.18em] text-emerald-400">After CodeRefine</p>
+              <p className="mb-3 text-xs font-medium uppercase tracking-[.18em] text-emerald-400">After Code Refine</p>
               <CodePanel after />
               <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                 {[['Maintainability', '91'], ['Complexity', '8'], ['Readability', '94'], ['Security', '89']].map(([label, value]) => (
@@ -1336,7 +1382,7 @@ export default function Home() {
               ['12,480', 'Repositories analyzed'],
               ['84,210', 'Pull requests reviewed'],
               ['6.2M', 'Lines improved'],
-              ['420+', 'Teams using CodeRefine'],
+              ['420+', 'Teams using Code Refine'],
             ].map(([value, label]) => (
               <div key={label}>
                 <p className="text-3xl font-semibold tracking-tight">{value}</p>
@@ -1366,10 +1412,13 @@ export default function Home() {
         </div>
       </section>
 
+      </>
+      )}
+
       <footer className="border-t border-slate-100 px-5 py-8 lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 text-sm text-slate-500 sm:flex-row">
-          <span className="font-semibold text-slate-900">CodeRefine</span>
-          <span>© 2026 CodeRefine. Quality for the AI era.</span>
+          <span className="font-semibold text-slate-900">Code Refine</span>
+          <span>© 2026 Code Refine. Quality for the AI era.</span>
           <div className="flex gap-5">
             <a href="#features" className="hover:text-slate-900">Features</a>
             <a href="#pricing" className="hover:text-slate-900">Pricing</a>
