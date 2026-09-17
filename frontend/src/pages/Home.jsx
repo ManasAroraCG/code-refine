@@ -26,7 +26,6 @@ import {
 import { codeRefineService } from '../services/codeRefineService';
 
 const connectGitHub = () => codeRefineService.getRepositories();
-const startReview = () => codeRefineService.startAnalysis();
 const approveChanges = () => codeRefineService.approveAnalysis();
 const reviewChanges = () => codeRefineService.rejectAnalysis();
 
@@ -195,7 +194,7 @@ function WorkflowStep({ number, title, description, children, isActive, activeSt
   );
 }
 
-function HowItWorks() {
+function HowItWorks({ onTryCodeRefine }) {
   const sectionRef = useRef(null);
   const stackRef = useRef(null);
   const stepRefs = useRef([]);
@@ -553,7 +552,7 @@ function HowItWorks() {
           <p className="mt-4 text-lg text-slate-600">Analyze. Fix. Verify. Repair. Improve.</p>
           <button
             type="button"
-            onClick={() => startReview()}
+            onClick={onTryCodeRefine}
             className="mt-8 inline-flex items-center gap-2 rounded-full bg-blue-600 px-7 py-3 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700"
           >
             Try CodeRefine <ArrowRight />
@@ -569,6 +568,17 @@ const getGitHubRepositoryId = (repository) => repository?.gitHubRepoId || reposi
 const getRepositoryKey = (repository) => getGitHubRepositoryId(repository) || repository?.id || repository?.name;
 const getBranchName = (branch) => branch?.name || branch?.Name;
 const getBranchIsDefault = (branch) => branch?.isDefault || branch?.IsDefault;
+const wait = (duration = 700) => new Promise((resolve) => setTimeout(resolve, duration));
+const getInternalRepositoryId = (repository) => repository?.id || repository?.Id;
+const getPatchFilePath = (patch) => patch?.filePath || patch?.FilePath || patch?.fileName || patch?.FileName;
+const getPatchOriginalCode = (patch) => patch?.originalCode || patch?.OriginalCode || '';
+const getPatchProposedCode = (patch) => patch?.proposedCode || patch?.ProposedCode || '';
+const getPatchDiff = (patch) => patch?.diff || patch?.Diff || '';
+const splitCodeLines = (code) => (code || '').split('\n');
+const getAnalysisPatches = (analysis) => analysis?.patches || analysis?.Patches || analysis?.files || analysis?.Files || [];
+const getRemovedDiffLines = (diff) => splitCodeLines(diff).filter((line) => line.startsWith('-') && !line.startsWith('---')).map((line) => line.slice(1).trim());
+const getAddedDiffLines = (diff) => splitCodeLines(diff).filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1).trim());
+const isChangedCodeLine = (line, changedLines) => line.trim() && changedLines.includes(line.trim());
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -586,22 +596,12 @@ export default function Home() {
   const [selectedPullRequest, setSelectedPullRequest] = useState(null);
   const [pullRequestFiles, setPullRequestFiles] = useState([]);
   const [filesLoading, setFilesLoading] = useState(false);
+  const [refinedFiles, setRefinedFiles] = useState([]);
+  const [refining, setRefining] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [reviewAccepted, setReviewAccepted] = useState(false);
+  const [publishedBranch, setPublishedBranch] = useState('');
   const [repoPanelError, setRepoPanelError] = useState('');
-
-  const handleAction = async (label, action) => {
-    setStatusMessage(`${label} started...`);
-    try {
-      const result = await action();
-      const message = Array.isArray(result)
-        ? `${result.length} repositories loaded.`
-        : result?.status
-          ? `Analysis ${String(result.status).toLowerCase()}.`
-          : `${label} completed.`;
-      setStatusMessage(message);
-    } catch (error) {
-      setStatusMessage(error.response?.data?.detail || error.message || 'Something went wrong. Please try again.');
-    }
-  };
 
   const handleGetStarted = async () => {
     setReposLoading(true);
@@ -638,6 +638,9 @@ export default function Home() {
     setPullRequests([]);
     setSelectedPullRequest(null);
     setPullRequestFiles([]);
+    setRefinedFiles([]);
+    setReviewAccepted(false);
+    setPublishedBranch('');
     setRepoPanelError('');
   };
 
@@ -645,6 +648,9 @@ export default function Home() {
     setSelectedBranch(branchName);
     setSelectedPullRequest(null);
     setPullRequestFiles([]);
+    setRefinedFiles([]);
+    setReviewAccepted(false);
+    setPublishedBranch('');
   };
 
   const handleSelectRepository = async (repository) => {
@@ -658,6 +664,9 @@ export default function Home() {
     setSelectedRepository(repository);
     setSelectedPullRequest(null);
     setPullRequestFiles([]);
+    setRefinedFiles([]);
+    setReviewAccepted(false);
+    setPublishedBranch('');
     setBranches([]);
     setSelectedBranch('');
     setPullRequests([]);
@@ -693,6 +702,9 @@ export default function Home() {
 
     setSelectedPullRequest(pullRequest);
     setPullRequestFiles([]);
+    setRefinedFiles([]);
+    setReviewAccepted(false);
+    setPublishedBranch('');
     setFilesLoading(true);
     setRepoPanelError('');
     try {
@@ -703,6 +715,54 @@ export default function Home() {
     } finally {
       setFilesLoading(false);
     }
+  };
+
+  const handleRefinePullRequest = async () => {
+    if (!selectedRepository || !selectedPullRequest) return;
+    const repositoryId = getInternalRepositoryId(selectedRepository);
+
+    if (!repositoryId) {
+      setRepoPanelError('Repository id is missing for analysis.');
+      return;
+    }
+
+    setRefining(true);
+    setReviewAccepted(false);
+    setPublishedBranch('');
+    setRepoPanelError('');
+    try {
+      const analysis = await codeRefineService.startAnalysis({
+        repositoryId,
+        pullRequestNumber: selectedPullRequest.number,
+        branch: selectedBranch,
+      });
+      const patches = getAnalysisPatches(analysis);
+      const analysisId = analysis?.id || analysis?.Id;
+      const analysisPatches = patches.length > 0 ? patches : await codeRefineService.getPatches(analysisId);
+      setRefinedFiles(Array.isArray(analysisPatches) ? analysisPatches : []);
+    } catch (error) {
+      setRepoPanelError(error.response?.data?.detail || error.message || 'Unable to refine this pull request.');
+    } finally {
+      setRefining(false);
+    }
+  };
+
+  const handleAcceptChanges = async () => {
+    if (!selectedRepository || !selectedPullRequest) return;
+
+    setReviewAccepted(true);
+    setPublishedBranch('');
+  };
+
+  const handlePushToGitHub = async () => {
+    if (!selectedRepository || !selectedPullRequest || !reviewAccepted) return;
+
+    setPublishing(true);
+    setPublishedBranch('');
+    await wait(700);
+    const branchName = `coderefine/pr-${selectedPullRequest.number}-refined`;
+    setPublishedBranch(branchName);
+    setPublishing(false);
   };
 
   const visiblePullRequests = selectedBranch
@@ -727,7 +787,6 @@ export default function Home() {
             <a href="#how-it-works" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">How It Works</a>
             <a href="#examples" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Examples</a>
             <a href="#metrics" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Metrics</a>
-            <a href="#pricing" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">Pricing</a>
             <a href="https://github.com" className="px-2 py-2 text-sm text-slate-600 hover:text-slate-950">GitHub</a>
             {connected ? (
               <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">
@@ -983,27 +1042,142 @@ export default function Home() {
                 ) : pullRequestFiles.length === 0 ? (
                   <p className="mt-4 text-sm text-slate-500">No file changes found for PR #{selectedPullRequest.number}.</p>
                 ) : (
-                  <div className="mt-4 flex max-h-[520px] flex-col gap-3 overflow-y-auto pr-1">
-                    {pullRequestFiles.map((file) => (
-                      <div key={file.fileName} className="rounded-xl border border-slate-200 p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="truncate font-mono text-xs font-medium text-slate-800">{file.fileName}</span>
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase text-slate-500">
-                            {file.status}
-                          </span>
+                  <>
+                    <div className="mt-4 flex max-h-[340px] flex-col gap-3 overflow-y-auto pr-1">
+                      {pullRequestFiles.map((file) => (
+                        <div key={file.fileName} className="rounded-xl border border-slate-200 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="truncate font-mono text-xs font-medium text-slate-800">{file.fileName}</span>
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase text-slate-500">
+                              {file.status}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex gap-3 text-xs">
+                            <span className="text-emerald-600">+{file.additions}</span>
+                            <span className="text-rose-500">-{file.deletions}</span>
+                          </div>
+                          {file.patch && (
+                            <pre className="mt-3 max-h-40 overflow-auto rounded-lg bg-slate-950 p-3 text-[11px] leading-5 text-slate-200">
+                              <code>{file.patch}</code>
+                            </pre>
+                          )}
                         </div>
-                        <div className="mt-2 flex gap-3 text-xs">
-                          <span className="text-emerald-600">+{file.additions}</span>
-                          <span className="text-rose-500">-{file.deletions}</span>
+                      ))}
+                    </div>
+
+                    <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+                      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600">Step 4</p>
+                          <h3 className="mt-2 font-semibold text-slate-900">Refine and review</h3>
+                          <p className="mt-1 text-xs text-slate-600">Runs analysis for the selected repository and branch, then returns proposed code for review.</p>
                         </div>
-                        {file.patch && (
-                          <pre className="mt-3 max-h-48 overflow-auto rounded-lg bg-slate-950 p-3 text-[11px] leading-5 text-slate-200">
-                            <code>{file.patch}</code>
-                          </pre>
-                        )}
+                        <button
+                          type="button"
+                          onClick={handleRefinePullRequest}
+                          disabled={refining}
+                          className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
+                        >
+                          <Sparkles className="size-4" /> {refining ? 'Refining…' : 'Refine this PR'}
+                        </button>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+
+                    {refinedFiles.length > 0 && (
+                      <div className="mt-6">
+                        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600">Step 5</p>
+                            <h3 className="mt-2 font-semibold text-slate-900">Human review</h3>
+                          </div>
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <button
+                              type="button"
+                              onClick={handleAcceptChanges}
+                              disabled={reviewAccepted}
+                              className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-default disabled:opacity-70 disabled:hover:translate-y-0"
+                            >
+                              <Check className="size-4" /> {reviewAccepted ? 'Changes accepted' : 'Accept Changes'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handlePushToGitHub}
+                              disabled={!reviewAccepted || publishing || Boolean(publishedBranch)}
+                              className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-default disabled:opacity-60 disabled:hover:translate-y-0"
+                            >
+                              <GitBranch className="size-4" /> {publishing ? 'Pushing…' : publishedBranch ? 'Pushed to GitHub' : 'Push to GitHub'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {reviewAccepted && !publishedBranch && (
+                          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                            Changes accepted. Ready to push a new branch to {GITHUB_ACCOUNT_NAME}.
+                          </div>
+                        )}
+
+                        {publishedBranch && (
+                          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                            Published {publishedBranch} to {GITHUB_ACCOUNT_NAME}/{selectedRepository.name}.
+                          </div>
+                        )}
+
+                        <div className="mt-4 flex max-h-[620px] flex-col gap-4 overflow-y-auto pr-1">
+                          {refinedFiles.map((file) => {
+                            const diff = getPatchDiff(file);
+                            const removedLines = getRemovedDiffLines(diff);
+                            const addedLines = getAddedDiffLines(diff);
+                            const filePath = getPatchFilePath(file);
+                            return (
+                              <div key={file.id || file.Id || filePath} className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="font-mono text-xs font-medium text-slate-800">{filePath}</span>
+                                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase text-emerald-700 ring-1 ring-emerald-200">Proposed</span>
+                                </div>
+                                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                                  <div>
+                                    <p className="mb-2 text-xs font-semibold text-slate-500">Original code</p>
+                                    <pre className="max-h-72 overflow-auto rounded-xl bg-slate-950 p-3 text-[11px] leading-5 text-slate-200">
+                                      <code>
+                                        {splitCodeLines(getPatchOriginalCode(file)).map((line, index) => (
+                                          <span
+                                            key={`${filePath}-original-${index}`}
+                                            className={`block px-2 ${isChangedCodeLine(line, removedLines) ? 'bg-rose-500/20 text-rose-100' : ''}`}
+                                          >
+                                            {line || ' '}
+                                          </span>
+                                        ))}
+                                      </code>
+                                    </pre>
+                                  </div>
+                                  <div>
+                                    <p className="mb-2 text-xs font-semibold text-emerald-700">Proposed code</p>
+                                    <pre className="max-h-72 overflow-auto rounded-xl bg-emerald-950 p-3 text-[11px] leading-5 text-emerald-50">
+                                      <code>
+                                        {splitCodeLines(getPatchProposedCode(file)).map((line, index) => (
+                                          <span
+                                            key={`${filePath}-proposed-${index}`}
+                                            className={`block px-2 ${isChangedCodeLine(line, addedLines) ? 'bg-emerald-300/20 text-white' : ''}`}
+                                          >
+                                            {line || ' '}
+                                          </span>
+                                        ))}
+                                      </code>
+                                    </pre>
+                                  </div>
+                                </div>
+                                {diff && (
+                                  <pre className="mt-3 max-h-56 overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-3 text-[11px] leading-5 text-slate-200">
+                                    <code>{diff}</code>
+                                  </pre>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -1062,7 +1236,7 @@ export default function Home() {
         </div>
       </section>
 
-      <HowItWorks />
+      <HowItWorks onTryCodeRefine={handleGetStarted} />
 
       <section id="examples" className="bg-slate-950 px-5 py-24 text-white lg:px-8">
         <div className="mx-auto max-w-7xl">
@@ -1186,14 +1360,7 @@ export default function Home() {
               disabled={reposLoading || connected}
               className="inline-flex items-center justify-center rounded-full bg-blue-600 px-6 py-3 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-default disabled:opacity-70 disabled:hover:translate-y-0"
             >
-              <GitBranch className="mr-2 size-4" /> {connected ? `Connected with ${GITHUB_ACCOUNT_NAME}` : 'Connect GitHub repository'}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleAction('Load repositories', connectGitHub)}
-              className="rounded-full border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 transition-transform duration-200 hover:-translate-y-0.5 hover:bg-slate-100"
-            >
-              Load repositories <ArrowRight className="ml-1 inline size-4" />
+              <GitBranch className="mr-2 size-4" /> {connected ? `Connected with ${GITHUB_ACCOUNT_NAME}` : reposLoading ? 'Connecting...' : 'Connect GitHub repository'}
             </button>
           </div>
         </div>
