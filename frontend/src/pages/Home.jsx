@@ -1143,28 +1143,8 @@ export default function Home() {
                             >
                               <Check className="size-4" /> {reviewAccepted ? 'Changes accepted' : 'Accept Changes'}
                             </button>
-                            <button
-                              type="button"
-                              onClick={handlePushToGitHub}
-                              disabled={!reviewAccepted || publishing || Boolean(publishedBranch)}
-                              className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-default disabled:opacity-60 disabled:hover:translate-y-0"
-                            >
-                              <GitBranch className="size-4" /> {publishing ? 'Pushing…' : publishedBranch ? 'Pushed to GitHub' : 'Push to GitHub'}
-                            </button>
                           </div>
                         </div>
-
-                        {reviewAccepted && !publishedBranch && (
-                          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-                            Changes accepted. Ready to push a new branch to {GITHUB_ACCOUNT_NAME}.
-                          </div>
-                        )}
-
-                        {publishedBranch && (
-                          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                            Published {publishedBranch} to {GITHUB_ACCOUNT_NAME}/{selectedRepository.name}.
-                          </div>
-                        )}
 
                         <div className="mt-4 flex max-h-[620px] flex-col gap-4 overflow-y-auto pr-1">
                           {refinedFiles.map((file) => {

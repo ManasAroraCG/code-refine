@@ -24,6 +24,11 @@ public class WorkflowRequest
     public IReadOnlyList<string> ChangedFiles { get; set; } = new List<string>();
     public string Language { get; set; } = "python";
     public IReadOnlyList<string> Agents { get; set; } = new List<string>();
+
+    /// <summary>Push-capable clone URL and PR context; required for the engine to open the improvement PR.</summary>
+    public string? RepoUrl { get; set; }
+    public int? PrNumber { get; set; }
+    public string? BaseBranch { get; set; }
 }
 
 /// <summary>Rich finding shape returned inside WorkflowResponse (distinct from AgentFindingDto used by /analyze).</summary>
@@ -80,4 +85,8 @@ public class WorkflowResponse
     public string CombinedDiff { get; set; } = string.Empty;
     public WorkflowVerificationResultDto? VerificationResult { get; set; }
     public int RetryCount { get; set; }
+
+    /// <summary>Set once the engine has pushed the fix branch and opened the improvement PR.</summary>
+    public string? ImprovementBranch { get; set; }
+    public string? ImprovementPrUrl { get; set; }
 }
