@@ -22,4 +22,7 @@ public class AnalysisResponse
     public DateTime? CompletedAt { get; set; }
     public int FindingCount { get; set; }
     public IReadOnlyList<FindingDto> Findings { get; set; } = new List<FindingDto>();
+
+    /// <summary>Final per-file code going into the improvement PR, for human review.</summary>
+    public IReadOnlyList<FinalCodeFileDto> FinalCode { get; set; } = new List<FinalCodeFileDto>();
 }

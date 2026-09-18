@@ -33,4 +33,7 @@ public class AnalysisRun
     public ICollection<Finding> Findings { get; set; } = new List<Finding>();
     public ICollection<VerificationResult> VerificationResults { get; set; } = new List<VerificationResult>();
     public ICollection<Review> Reviews { get; set; } = new List<Review>();
+
+    /// <summary>Final per-file code the engine produced for the improvement PR (one entry per changed file).</summary>
+    public ICollection<FinalCodeFile> FinalCodeFiles { get; set; } = new List<FinalCodeFile>();
 }

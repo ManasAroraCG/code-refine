@@ -123,12 +123,25 @@ public class AnalysisService : IAnalysisService
                 AnalysisId = run.Id.ToString(),
                 RepoPath = workspace.RepoPath,
                 ChangedFiles = workspace.ChangedFiles,
-                Language = "python"
+                Language = "python",
+                RepoUrl = repoUrl,
+                PrNumber = run.PullRequestNumber,
+                BaseBranch = run.TargetBranch
             }, cancellationToken);
 
             ApplyWorkflowResult(run, workflowResult);
 
-            run.Status = AnalysisStatus.ReadyForReview;
+            // The engine always pushes an improvement branch and opens a PR for
+            // human review on GitHub itself once verification finishes, so a
+            // populated PR URL means the run has reached its terminal state.
+            run.Status = string.IsNullOrWhiteSpace(run.ImprovementPrUrl)
+                ? AnalysisStatus.ReadyForReview
+                : AnalysisStatus.Completed;
+
+            if (run.Status == AnalysisStatus.Completed)
+            {
+                run.CompletedAt = DateTime.UtcNow;
+            }
         }
         catch (AiServiceException ex)
         {
@@ -157,6 +170,9 @@ public class AnalysisService : IAnalysisService
     private static void ApplyWorkflowResult(AnalysisRun run, WorkflowResponse workflowResult)
     {
         run.QualityScoreBefore = workflowResult.QualityScore;
+        run.ImprovementBranch = workflowResult.ImprovementBranch;
+        run.ImprovementPrUrl = workflowResult.ImprovementPrUrl;
+        run.ImprovementPrNumber = ParsePrNumberFromUrl(workflowResult.ImprovementPrUrl);
 
         var findingsByFile = new Dictionary<string, List<Finding>>(StringComparer.OrdinalIgnoreCase);
 
@@ -205,6 +221,13 @@ public class AnalysisService : IAnalysisService
 
         foreach (var patchDto in workflowResult.GeneratedPatches)
         {
+            // One entry per file — this is exactly what ends up in the improvement PR.
+            run.FinalCodeFiles.Add(new FinalCodeFile
+            {
+                FilePath = patchDto.FilePath,
+                Code = patchDto.ProposedCode
+            });
+
             if (!findingsByFile.TryGetValue(patchDto.FilePath, out var findingsForFile))
             {
                 continue;
@@ -254,6 +277,18 @@ public class AnalysisService : IAnalysisService
 
     private static bool TryParseCheckType(string checkType, out VerificationCheckType result)
         => Enum.TryParse(ToPascalCase(checkType), ignoreCase: true, out result);
+
+    /// <summary>Extracts the trailing PR number from a GitHub PR URL, e.g. ".../pull/13".</summary>
+    private static int? ParsePrNumberFromUrl(string? prUrl)
+    {
+        if (string.IsNullOrWhiteSpace(prUrl))
+        {
+            return null;
+        }
+
+        var lastSegment = prUrl.TrimEnd('/').Split('/').LastOrDefault();
+        return int.TryParse(lastSegment, out var number) ? number : null;
+    }
 
     private static TEnum ParseEnum<TEnum>(string value, TEnum fallback) where TEnum : struct, Enum
         => Enum.TryParse<TEnum>(ToPascalCase(value), ignoreCase: true, out var parsed) ? parsed : fallback;
@@ -442,7 +477,10 @@ public class AnalysisService : IAnalysisService
         StartedAt = run.StartedAt,
         CompletedAt = run.CompletedAt,
         FindingCount = run.Findings.Count,
-        Findings = includeFindings ? run.Findings.Select(MapToDto).ToList() : new List<FindingDto>()
+        Findings = includeFindings ? run.Findings.Select(MapToDto).ToList() : new List<FindingDto>(),
+        FinalCode = includeFindings
+            ? run.FinalCodeFiles.Select(f => new FinalCodeFileDto { FilePath = f.FilePath, Code = f.Code }).ToList()
+            : new List<FinalCodeFileDto>()
     };
 
     private static FindingDto MapToDto(Finding finding) => new()

@@ -195,6 +195,34 @@ function CodePanel({ after = false }) {
   );
 }
 
+function DiffLines({ diff }) {
+  if (!diff) return null;
+
+  return (
+    <pre className="mt-3 max-h-[480px] overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-4 text-[12.5px] leading-6">
+      <code>
+        {diff.split('\n').map((line, index) => {
+          let lineClass = 'text-slate-300';
+          if (line.startsWith('+++') || line.startsWith('---')) {
+            lineClass = 'text-slate-500';
+          } else if (line.startsWith('@@')) {
+            lineClass = 'bg-sky-500/10 text-sky-400';
+          } else if (line.startsWith('+')) {
+            lineClass = 'border-l-2 border-emerald-500 bg-emerald-500/15 text-emerald-300';
+          } else if (line.startsWith('-')) {
+            lineClass = 'border-l-2 border-rose-500 bg-rose-500/15 text-rose-300';
+          }
+          return (
+            <span key={index} className={`block whitespace-pre px-3 ${lineClass}`}>
+              {line || ' '}
+            </span>
+          );
+        })}
+      </code>
+    </pre>
+  );
+}
+
 function WorkflowStep({ number, title, description, children, isActive, activeStep, stepRef }) {
   const stepIndex = Number(number) - 1;
   const distanceFromActive = stepIndex - activeStep;
@@ -612,6 +640,15 @@ const getAnalysisPatches = (analysis) => analysis?.patches || analysis?.Patches 
 const getRemovedDiffLines = (diff) => splitCodeLines(diff).filter((line) => line.startsWith('-') && !line.startsWith('---')).map((line) => line.slice(1).trim());
 const getAddedDiffLines = (diff) => splitCodeLines(diff).filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1).trim());
 const isChangedCodeLine = (line, changedLines) => line.trim() && changedLines.includes(line.trim());
+const REFINE_STAGES = [
+  'Preparing workspace…',
+  'Cloning repository…',
+  'Running AI review agents…',
+  'Aggregating findings…',
+  'Generating patches…',
+  'Verifying changes in sandbox…',
+  'Finalizing…',
+];
 const getApiErrorMessage = (error, fallback) => {
   if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
     return 'Unable to reach the backend API. Start CodeRefine.Api and try connecting again.';
@@ -638,6 +675,8 @@ export default function Home() {
   const [filesLoading, setFilesLoading] = useState(false);
   const [refinedFiles, setRefinedFiles] = useState([]);
   const [refining, setRefining] = useState(false);
+  const [refiningStage, setRefiningStage] = useState('');
+  const refiningStageTimerRef = useRef(null);
   const [publishing, setPublishing] = useState(false);
   const [reviewAccepted, setReviewAccepted] = useState(false);
   const [publishedBranch, setPublishedBranch] = useState('');
@@ -770,6 +809,14 @@ export default function Home() {
     setReviewAccepted(false);
     setPublishedBranch('');
     setRepoPanelError('');
+
+    let stageIndex = 0;
+    setRefiningStage(REFINE_STAGES[stageIndex]);
+    refiningStageTimerRef.current = setInterval(() => {
+      stageIndex = Math.min(stageIndex + 1, REFINE_STAGES.length - 1);
+      setRefiningStage(REFINE_STAGES[stageIndex]);
+    }, 4000);
+
     try {
       const analysis = await codeRefineService.startAnalysis({
         repositoryId,
@@ -783,7 +830,10 @@ export default function Home() {
     } catch (error) {
       setRepoPanelError(getApiErrorMessage(error, 'Unable to refine this pull request.'));
     } finally {
+      clearInterval(refiningStageTimerRef.current);
+      refiningStageTimerRef.current = null;
       setRefining(false);
+      setRefiningStage('');
     }
   };
 
@@ -1009,7 +1059,7 @@ export default function Home() {
 
             {repoPanelError && <p className="mt-6 text-sm text-rose-600">{repoPanelError}</p>}
 
-            <div className="mt-10 grid gap-6 lg:grid-cols-[.85fr_1.15fr]">
+            <div className={`mt-10 grid gap-6 ${refinedFiles.length > 0 ? 'lg:grid-cols-1' : 'lg:grid-cols-[.85fr_1.15fr]'}`}>
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
                 <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600">Step 1</p>
                 <h3 className="mt-2 flex items-center gap-2 font-semibold text-slate-900">
@@ -1120,11 +1170,17 @@ export default function Home() {
                           type="button"
                           onClick={handleRefinePullRequest}
                           disabled={refining}
-                          className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
+                          className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
                         >
-                          <Sparkles className="size-4" /> {refining ? 'Refining…' : 'Refine this PR'}
+                          <Sparkles className="size-4" /> {refining ? (refiningStage || 'Refining…') : 'Refine this PR'}
                         </button>
                       </div>
+                      {refining && (
+                        <div className="mt-3 flex items-center gap-2 text-xs text-blue-700">
+                          <span className="size-1.5 animate-pulse rounded-full bg-blue-600" />
+                          {refiningStage}
+                        </div>
+                      )}
                     </div>
 
                     {refinedFiles.length > 0 && (
@@ -1143,82 +1199,57 @@ export default function Home() {
                             >
                               <Check className="size-4" /> {reviewAccepted ? 'Changes accepted' : 'Accept Changes'}
                             </button>
-                            <button
-                              type="button"
-                              onClick={handlePushToGitHub}
-                              disabled={!reviewAccepted || publishing || Boolean(publishedBranch)}
-                              className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-default disabled:opacity-60 disabled:hover:translate-y-0"
-                            >
-                              <GitBranch className="size-4" /> {publishing ? 'Pushing…' : publishedBranch ? 'Pushed to GitHub' : 'Push to GitHub'}
-                            </button>
                           </div>
                         </div>
 
-                        {reviewAccepted && !publishedBranch && (
-                          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-                            Changes accepted. Ready to push a new branch to {GITHUB_ACCOUNT_NAME}.
-                          </div>
-                        )}
-
-                        {publishedBranch && (
-                          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                            Published {publishedBranch} to {GITHUB_ACCOUNT_NAME}/{selectedRepository.name}.
-                          </div>
-                        )}
-
-                        <div className="mt-4 flex max-h-[620px] flex-col gap-4 overflow-y-auto pr-1">
-                          {refinedFiles.map((file) => {
-                            const diff = getPatchDiff(file);
-                            const removedLines = getRemovedDiffLines(diff);
-                            const addedLines = getAddedDiffLines(diff);
-                            const filePath = getPatchFilePath(file);
-                            return (
-                              <div key={file.id || file.Id || filePath} className="rounded-2xl border border-slate-200 bg-white p-4">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <span className="font-mono text-xs font-medium text-slate-800">{filePath}</span>
-                                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase text-emerald-700 ring-1 ring-emerald-200">Proposed</span>
-                                </div>
-                                <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                                  <div>
-                                    <p className="mb-2 text-xs font-semibold text-slate-500">Original code</p>
-                                    <pre className="max-h-72 overflow-auto rounded-xl bg-slate-950 p-3 text-[11px] leading-5 text-slate-200">
-                                      <code>
-                                        {splitCodeLines(getPatchOriginalCode(file)).map((line, index) => (
-                                          <span
-                                            key={`${filePath}-original-${index}`}
-                                            className={`block px-2 ${isChangedCodeLine(line, removedLines) ? 'bg-rose-500/20 text-rose-100' : ''}`}
-                                          >
-                                            {line || ' '}
-                                          </span>
-                                        ))}
-                                      </code>
-                                    </pre>
-                                  </div>
-                                  <div>
-                                    <p className="mb-2 text-xs font-semibold text-emerald-700">Proposed code</p>
-                                    <pre className="max-h-72 overflow-auto rounded-xl bg-emerald-950 p-3 text-[11px] leading-5 text-emerald-50">
-                                      <code>
-                                        {splitCodeLines(getPatchProposedCode(file)).map((line, index) => (
-                                          <span
-                                            key={`${filePath}-proposed-${index}`}
-                                            className={`block px-2 ${isChangedCodeLine(line, addedLines) ? 'bg-emerald-300/20 text-white' : ''}`}
-                                          >
-                                            {line || ' '}
-                                          </span>
-                                        ))}
-                                      </code>
-                                    </pre>
-                                  </div>
-                                </div>
-                                {diff && (
-                                  <pre className="mt-3 max-h-56 overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-3 text-[11px] leading-5 text-slate-200">
-                                    <code>{diff}</code>
-                                  </pre>
-                                )}
+                        {(() => {
+                          const file = refinedFiles[refinedFiles.length - 1];
+                          const diff = getPatchDiff(file);
+                          const removedLines = getRemovedDiffLines(diff);
+                          const addedLines = getAddedDiffLines(diff);
+                          const filePath = getPatchFilePath(file);
+                          return (
+                            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-mono text-sm font-medium text-slate-800">{filePath}</span>
+                                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase text-emerald-700 ring-1 ring-emerald-200">Proposed</span>
                               </div>
-                            );
-                          })}
-                        </div>
+                              <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                                <div>
+                                  <p className="mb-2 text-xs font-semibold text-slate-500">Original code</p>
+                                  <pre className="max-h-[420px] overflow-auto rounded-xl bg-slate-950 p-4 text-[12.5px] leading-6 text-slate-200">
+                                    <code>
+                                      {splitCodeLines(getPatchOriginalCode(file)).map((line, index) => (
+                                        <span
+                                          key={`${filePath}-original-${index}`}
+                                          className={`block whitespace-pre px-2 ${isChangedCodeLine(line, removedLines) ? 'border-l-2 border-rose-500 bg-rose-500/20 text-rose-100' : ''}`}
+                                        >
+                                          {line || ' '}
+                                        </span>
+                                      ))}
+                                    </code>
+                                  </pre>
+                                </div>
+                                <div>
+                                  <p className="mb-2 text-xs font-semibold text-emerald-700">Proposed code</p>
+                                  <pre className="max-h-[420px] overflow-auto rounded-xl bg-slate-950 p-4 text-[12.5px] leading-6 text-emerald-50">
+                                    <code>
+                                      {splitCodeLines(getPatchProposedCode(file)).map((line, index) => (
+                                        <span
+                                          key={`${filePath}-proposed-${index}`}
+                                          className={`block whitespace-pre px-2 ${isChangedCodeLine(line, addedLines) ? 'border-l-2 border-emerald-500 bg-emerald-500/20 text-emerald-100' : ''}`}
+                                        >
+                                          {line || ' '}
+                                        </span>
+                                      ))}
+                                    </code>
+                                  </pre>
+                                </div>
+                              </div>
+                              <DiffLines diff={diff} />
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </>
